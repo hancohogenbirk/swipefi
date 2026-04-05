@@ -1,0 +1,20 @@
+# Production compose file for Synology NAS
+# Place at /volume1/docker/swipefi/docker-compose.yml on your NAS
+#
+# Usage:
+#   sudo docker compose pull && sudo docker compose up -d
+#
+# Replace <github-user> with your GitHub username below.
+
+services:
+  swipefi:
+    image: ghcr.io/<github-user>/swipefi:latest
+    container_name: swipefi
+    network_mode: host  # Required for UPnP/SSDP multicast discovery
+    volumes:
+      - /volume1/audio:/audio          # Your NAS audio share
+      - /volume1/docker/swipefi/data:/data  # SQLite + config
+    environment:
+      - SWIPEFI_PORT=8080
+      - SWIPEFI_DATA_DIR=/data
+    restart: unless-stopped

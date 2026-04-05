@@ -1,0 +1,21 @@
+# Watchtower — auto-updates Docker containers when new images are pushed
+# Place at /volume1/docker/watchtower/docker-compose.yml on your NAS
+#
+# Checks ghcr.io at 3 AM daily. If a new SwipeFi image exists, pulls and
+# recreates the container automatically. Data volumes are preserved.
+
+services:
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    environment:
+      - TZ=Europe/Brussels
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 3 * * *
+      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_REVIVE_STOPPED=false
+      - DOCKER_API_VERSION=1.43
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: swipefi  # Only monitor the swipefi container
+    restart: unless-stopped
