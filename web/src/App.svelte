@@ -17,6 +17,8 @@
   let error = $state('');
 
   let playerState = $derived(getPlayerState());
+  let scanProgress = $state({ scanning: false, scanned: 0, total: 0 });
+  let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   onMount(async () => {
     try {
@@ -29,6 +31,12 @@
       }
 
       await loadInitialState();
+
+      // Check if a scan is running
+      scanProgress = await api.scanStatus();
+      if (scanProgress.scanning) {
+        startScanPolling();
+      }
 
       // Discover devices
       devices = await api.devices();
@@ -60,11 +68,31 @@
 
   onDestroy(() => {
     disconnectWebSocket();
+    stopScanPolling();
   });
 
+  function startScanPolling() {
+    stopScanPolling();
+    scanPollTimer = setInterval(async () => {
+      try {
+        scanProgress = await api.scanStatus();
+        if (!scanProgress.scanning) {
+          stopScanPolling();
+        }
+      } catch { /* ignore */ }
+    }, 500);
+  }
+
+  function stopScanPolling() {
+    if (scanPollTimer) {
+      clearInterval(scanPollTimer);
+      scanPollTimer = null;
+    }
+  }
+
   async function onMusicDirChosen() {
-    // Music dir is now set, proceed to device selection
     view = 'loading';
+    startScanPolling();
     devices = await api.devices();
     if (devices.length === 0) {
       try { devices = await api.scanDevices(); } catch { /* */ }
@@ -129,7 +157,18 @@
   {#if view === 'loading'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
-      <p class="subtitle">Loading...</p>
+      {#if scanProgress.scanning && scanProgress.total > 0}
+        <div class="scan-progress">
+          <div class="scan-bar">
+            <div class="scan-fill" style="width: {Math.round((scanProgress.scanned / scanProgress.total) * 100)}%"></div>
+          </div>
+          <p class="scan-text">Scanning library: {scanProgress.scanned} / {scanProgress.total} files</p>
+        </div>
+      {:else if scanProgress.scanning}
+        <p class="subtitle">Scanning library...</p>
+      {:else}
+        <p class="subtitle">Loading...</p>
+      {/if}
     </div>
 
   {:else if view === 'choose-dir'}
@@ -211,6 +250,35 @@
   .subtitle {
     color: #888;
     font-size: 1rem;
+  }
+
+  .scan-progress {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .scan-bar {
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .scan-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1db954, #7cb3ff);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .scan-text {
+    color: #888;
+    font-size: 0.85rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   .error {

@@ -11,9 +11,16 @@ import (
 	"swipefi/internal/store"
 )
 
+type ScanStatus struct {
+	Scanning bool `json:"scanning"`
+	Scanned  int  `json:"scanned"`
+	Total    int  `json:"total"` // estimated from previous scan or directory walk
+}
+
 type Scanner struct {
 	musicDir string
 	store    *store.Store
+	status   ScanStatus
 }
 
 func NewScanner(musicDir string, s *store.Store) *Scanner {
@@ -28,8 +35,35 @@ func (sc *Scanner) MusicDir() string {
 	return sc.musicDir
 }
 
+func (sc *Scanner) GetStatus() ScanStatus {
+	return sc.status
+}
+
 func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	slog.Info("starting library scan", "dir", sc.musicDir)
+
+	// Quick count of audio files for progress estimation
+	total := 0
+	filepath.WalkDir(sc.musicDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
+				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if IsAudioFile(d.Name()) {
+			total++
+		}
+		return nil
+	})
+
+	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total}
+	slog.Info("scan: counted files", "total", total)
 
 	existingPaths := make(map[string]bool)
 	var count int
@@ -87,12 +121,16 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		}
 
 		count++
+		sc.status.Scanned = count
 		if count%100 == 0 {
-			slog.Info("scan progress", "tracks", count)
+			slog.Info("scan progress", "tracks", count, "total", total)
 		}
 
 		return nil
 	})
+
+	sc.status.Scanning = false
+	sc.status.Scanned = count
 
 	if err != nil {
 		return count, err

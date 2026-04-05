@@ -55,6 +55,7 @@ export const api = {
   tracks: (folder: string, sort = 'added_at', order = 'asc') =>
     request<Track[]>('GET', `/api/tracks?folder=${encodeURIComponent(folder)}&sort=${sort}&order=${order}`),
   scanLibrary: () => request<{ status: string; tracks: number }>('POST', '/api/library/scan'),
+  scanStatus: () => request<{ scanning: boolean; scanned: number; total: number }>('GET', '/api/library/scan/status'),
 
   // Player
   play: (folder: string, sort: string, order: string) =>

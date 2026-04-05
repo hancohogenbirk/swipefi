@@ -83,6 +83,10 @@ func (a *API) GetTrack(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, track)
 }
 
+func (a *API) ScanStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.scanner.GetStatus())
+}
+
 func (a *API) ScanLibrary(w http.ResponseWriter, r *http.Request) {
 	count, err := a.scanner.Scan(r.Context())
 	if err != nil {
