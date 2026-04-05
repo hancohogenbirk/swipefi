@@ -11,7 +11,10 @@ services:
     environment:
       - TZ=Europe/Brussels
       - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_SCHEDULE=0 0 3 * * *
+      # For active development: check every 5 minutes
+      - WATCHTOWER_POLL_INTERVAL=300
+      # For production: check daily at 3 AM (swap with the line above)
+      # - WATCHTOWER_SCHEDULE=0 0 3 * * *
       - WATCHTOWER_INCLUDE_STOPPED=true
       - WATCHTOWER_REVIVE_STOPPED=false
       - DOCKER_API_VERSION=1.43
