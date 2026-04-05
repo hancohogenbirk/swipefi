@@ -5,7 +5,7 @@
 #   2. Container Manager → Project → Create
 #   3. Project name: swipefi, Path: /volume1/docker/swipefi
 #   4. Source: "Create docker-compose.yml" → paste this file
-#   5. Replace <github-user> with your GitHub username
+#   5. Replace hancohogenbirk with your GitHub username
 #   6. Click Next → Done
 #
 # The app will be at http://your-nas:8080
@@ -13,7 +13,7 @@
 
 services:
   swipefi:
-    image: ghcr.io/<github-user>/swipefi:latest
+    image: ghcr.io/hancohogenbirk/swipefi:latest
     container_name: swipefi
     network_mode: host  # Required for UPnP/SSDP multicast (WiiM discovery)
     volumes:
