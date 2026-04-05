@@ -1,6 +1,6 @@
 # SwipeFi
 
-Self-hosted music player with Tinder-like swipe UI for curating your collection. Plays bitperfect via DLNA/UPnP to a WiiM renderer. Runs as a Docker container on a Synology NAS.
+Self-hosted music player with Tinder-like swipe UI for curating your collection. Plays bitperfect via DLNA/UPnP to any compatible renderer. Runs as a Docker container on a Synology NAS.
 
 ## Tech Stack
 
@@ -12,8 +12,8 @@ Self-hosted music player with Tinder-like swipe UI for curating your collection.
 ## Architecture
 
 - Go binary serves REST API, WebSocket, raw audio streaming, and embedded Svelte static files
-- Backend acts as UPnP control point — discovers WiiM, sends playback commands
-- WiiM pulls audio directly from backend's HTTP file server (bitperfect, no transcoding)
+- Backend acts as UPnP control point — discovers DLNA renderers, sends playback commands
+- Renderer pulls audio directly from backend's HTTP file server (bitperfect, no transcoding)
 - Frontend is purely a control UI — it never touches audio
 
 ## Project Layout

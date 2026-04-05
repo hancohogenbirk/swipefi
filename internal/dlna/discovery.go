@@ -90,7 +90,7 @@ func (d *Discovery) GetRenderer(udn string) (*Renderer, bool) {
 }
 
 // GetLocalIP returns the first non-loopback IPv4 address on this machine.
-// Needed to construct stream URLs that the WiiM can reach.
+// Needed to construct stream URLs that DLNA renderers can reach.
 func GetLocalIP() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

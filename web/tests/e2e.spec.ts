@@ -57,7 +57,7 @@ test.describe.serial('SwipeFi E2E', () => {
     await expect(sortSelect).toHaveValue('play_count:asc');
   });
 
-  test('play button starts playback on WiiM', async ({ page }) => {
+  test('play button starts playback on renderer', async ({ page }) => {
     await ensureFolderView(page);
 
     const testFolder = page.locator('.folder-item', { hasText: 'Test - Flacalyzer' });

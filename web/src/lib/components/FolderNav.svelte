@@ -3,9 +3,10 @@
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState } from '../stores/player.svelte';
 
-  let { onNavigateToPlayer, onOpenSettings }: {
+  let { onNavigateToPlayer, onOpenSettings, onNavigateHome }: {
     onNavigateToPlayer: () => void;
     onOpenSettings: () => void;
+    onNavigateHome: () => void;
   } = $props();
 
   let currentPath = $state('');
@@ -73,7 +74,13 @@
 <div class="folder-nav">
   <header class="nav-header">
     <div class="breadcrumbs">
-      <button class="crumb" onclick={() => loadFolders('')}>Home</button>
+      <button class="crumb home-btn" onclick={onNavigateHome} aria-label="Home" title="Device selection">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+        </svg>
+      </button>
+      <span class="separator">/</span>
+      <button class="crumb" onclick={() => loadFolders('')}>Music</button>
       {#each pathParts as part, i}
         <span class="separator">/</span>
         <button class="crumb" onclick={() => navigateToBreadcrumb(i)}>{part}</button>
@@ -173,6 +180,11 @@
 
   .crumb:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  .home-btn {
+    display: flex;
+    align-items: center;
   }
 
   .separator {

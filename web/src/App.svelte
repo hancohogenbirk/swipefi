@@ -19,7 +19,6 @@
 
   onMount(async () => {
     try {
-      // Check if music directory is configured
       const config = await api.config();
       connectWebSocket();
 
@@ -40,13 +39,18 @@
         }
       }
 
-      if (devices.length === 0) {
-        view = 'setup';
-      } else if (devices.length === 1) {
-        await selectDevice(devices[0].udn);
-      } else {
-        view = 'setup';
+      // If something is already playing, go straight to Now Playing
+      if (playerState.state !== 'idle' && playerState.track) {
+        // Auto-select the first device if available (renderer is already set server-side)
+        if (devices.length > 0) {
+          selectedDevice = devices[0].udn;
+        }
+        view = 'player';
+        return;
       }
+
+      // Otherwise show device selection
+      view = 'setup';
     } catch (e) {
       console.error('[swipefi] init error:', e);
       view = 'choose-dir';
@@ -90,7 +94,7 @@
     try {
       devices = await api.scanDevices();
       if (devices.length === 0) {
-        error = 'No DLNA renderers found. Is your WiiM powered on?';
+        error = 'No DLNA renderers found. Is your device powered on?';
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Scan failed';
@@ -103,6 +107,10 @@
 
   function navigateToFolders() {
     view = 'folders';
+  }
+
+  function navigateToHome() {
+    view = 'setup';
   }
 
   function openSettings() {
@@ -152,7 +160,7 @@
     <Settings onDone={closeSettings} />
 
   {:else if view === 'folders'}
-    <FolderNav onNavigateToPlayer={navigateToPlayer} onOpenSettings={openSettings} />
+    <FolderNav onNavigateToPlayer={navigateToPlayer} onOpenSettings={openSettings} onNavigateHome={navigateToHome} />
 
     {#if playerState.state !== 'idle' && playerState.track}
       <button class="mini-player" onclick={navigateToPlayer}>

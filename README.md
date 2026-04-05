@@ -1,12 +1,12 @@
 # SwipeFi
 
-Self-hosted music player with a Tinder-like swipe interface for curating your collection. Plays bitperfect via DLNA/UPnP to a WiiM renderer. Runs as a Docker container on a Synology NAS.
+Self-hosted music player with a Tinder-like swipe interface for curating your collection. Plays bitperfect via DLNA/UPnP to a DLNA renderer renderer. Runs as a Docker container on a Synology NAS.
 
 **Swipe right** to keep a track. **Swipe left** to move it to a `to_delete` folder. That's it.
 
 ## Features
 
-- Bitperfect DLNA playback to WiiM (or any UPnP renderer)
+- Bitperfect DLNA playback to any UPnP/DLNA renderer (WiiM, TV, Sonos, etc.)
 - Tinder-like swipe UI — keep or discard tracks
 - Folder browser with one-tap playback
 - Play count tracking (counts after 60 seconds of listening)
@@ -98,7 +98,7 @@ services:
 
 1. Open `http://your-nas:8080`
 2. **Settings** screen → navigate to `/audio/Lossless/FLAC` (or your music path) → tap the green button
-3. WiiM is auto-discovered → browse folders → play → swipe
+3. Your DLNA renderer is auto-discovered → select it → browse folders → play → swipe
 
 ### Updating
 
@@ -168,7 +168,7 @@ Phone/Browser (Svelte SPA)
      ↕ REST + WebSocket
 Go Backend (chi router)
      ↕ UPnP AV commands
-WiiM ← pulls audio from Go's HTTP file server (bitperfect)
+DLNA Renderer ← pulls audio from Go's HTTP file server (bitperfect)
 ```
 
-The backend acts as a UPnP control point — it discovers the WiiM, sends playback commands, and serves raw audio files. No transcoding, no resampling.
+The backend acts as a UPnP control point — it discovers DLNA renderers on the network, sends playback commands, and serves raw audio files. No transcoding, no resampling. Works with any UPnP/DLNA compatible renderer.
