@@ -59,11 +59,14 @@ type Player struct {
 	// Polling
 	pollCancel context.CancelFunc
 
+	// Long-lived app context for background work (polling, etc.)
+	appCtx context.Context
+
 	// State change callback
 	onChange StateChangeFunc
 }
 
-func New(s *store.Store, musicDir, deleteDir, port string) (*Player, error) {
+func New(ctx context.Context, s *store.Store, musicDir, deleteDir, port string) (*Player, error) {
 	localIP, err := dlna.GetLocalIP()
 	if err != nil {
 		return nil, fmt.Errorf("get local ip: %w", err)
@@ -77,6 +80,7 @@ func New(s *store.Store, musicDir, deleteDir, port string) (*Player, error) {
 		port:      port,
 		localIP:   localIP,
 		state:     StateIdle,
+		appCtx:    ctx,
 	}, nil
 }
 
@@ -338,10 +342,11 @@ func (p *Player) checkPlayCountLocked(ctx context.Context) {
 }
 
 // Polling goroutine to track position and detect track end.
-func (p *Player) startPollingLocked(ctx context.Context) {
+// Uses the long-lived appCtx, not the HTTP request context.
+func (p *Player) startPollingLocked(_ context.Context) {
 	p.stopPollingLocked()
 
-	pollCtx, cancel := context.WithCancel(ctx)
+	pollCtx, cancel := context.WithCancel(p.appCtx)
 	p.pollCancel = cancel
 
 	go p.pollLoop(pollCtx)

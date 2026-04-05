@@ -12,19 +12,21 @@
 
   async function handleSwipeLeft() {
     try {
+      console.log('[swipefi] swipe left → reject');
       const s = await api.reject();
       updateState(s);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error('[swipefi] reject failed:', e);
     }
   }
 
   async function handleSwipeRight() {
     try {
+      console.log('[swipefi] swipe right → next');
       const s = await api.next();
       updateState(s);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error('[swipefi] next failed:', e);
     }
   }
 </script>

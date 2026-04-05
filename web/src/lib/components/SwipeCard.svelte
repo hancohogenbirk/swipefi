@@ -11,55 +11,80 @@
     onSwipeRight: () => void;
   } = $props();
 
-  const SWIPE_THRESHOLD = 100;
+  const SWIPE_THRESHOLD = 80;
   const ROTATION_FACTOR = 0.1;
 
   let startX = $state(0);
-  let currentX = $state(0);
+  let deltaX = $state(0);
   let dragging = $state(false);
   let swiping = $state(false);
   let swipeDirection = $state<'left' | 'right' | null>(null);
 
-  let deltaX = $derived(dragging ? currentX - startX : 0);
-  let rotation = $derived(deltaX * ROTATION_FACTOR);
+  let rotation = $derived(dragging ? deltaX * ROTATION_FACTOR : 0);
   let opacity = $derived(Math.max(0, 1 - Math.abs(deltaX) / 300));
 
   let cardStyle = $derived(
-    dragging || swiping
-      ? `transform: translateX(${swiping ? (swipeDirection === 'left' ? -500 : 500) : deltaX}px) rotate(${swiping ? (swipeDirection === 'left' ? -30 : 30) : rotation}deg); opacity: ${swiping ? 0 : opacity}; transition: ${swiping ? 'transform 0.3s ease-out, opacity 0.3s ease-out' : 'none'};`
-      : 'transform: translateX(0) rotate(0deg); opacity: 1; transition: transform 0.3s ease, opacity 0.3s ease;'
+    swiping
+      ? `transform: translateX(${swipeDirection === 'left' ? -500 : 500}px) rotate(${swipeDirection === 'left' ? -30 : 30}deg); opacity: 0; transition: transform 0.3s ease-out, opacity 0.3s ease-out;`
+      : dragging
+        ? `transform: translateX(${deltaX}px) rotate(${rotation}deg); opacity: ${opacity}; transition: none;`
+        : 'transform: translateX(0) rotate(0deg); opacity: 1; transition: transform 0.3s ease, opacity 0.3s ease;'
   );
 
-  let overlayStyle = $derived(() => {
-    if (swiping || !dragging) return '';
-    if (deltaX > 30) return 'keep';
-    if (deltaX < -30) return 'reject';
-    return '';
-  });
+  let feedbackLabel = $derived(
+    !dragging || swiping ? '' : deltaX > 30 ? 'keep' : deltaX < -30 ? 'reject' : ''
+  );
 
-  function handlePointerDown(e: PointerEvent) {
+  // Touch events (mobile)
+  function handleTouchStart(e: TouchEvent) {
+    if (swiping) return;
+    dragging = true;
+    startX = e.touches[0].clientX;
+    deltaX = 0;
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (!dragging || swiping) return;
+    e.preventDefault();
+    deltaX = e.touches[0].clientX - startX;
+  }
+
+  function handleTouchEnd() {
+    if (!dragging || swiping) return;
+    finishSwipe();
+  }
+
+  // Mouse events (desktop)
+  function handleMouseDown(e: MouseEvent) {
     if (swiping) return;
     dragging = true;
     startX = e.clientX;
-    currentX = e.clientX;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    deltaX = 0;
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   }
 
-  function handlePointerMove(e: PointerEvent) {
+  function handleMouseMove(e: MouseEvent) {
     if (!dragging || swiping) return;
-    currentX = e.clientX;
+    deltaX = e.clientX - startX;
   }
 
-  function handlePointerUp() {
+  function handleMouseUp() {
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
     if (!dragging || swiping) return;
+    finishSwipe();
+  }
+
+  function finishSwipe() {
     dragging = false;
-
     if (deltaX > SWIPE_THRESHOLD) {
       triggerSwipe('right');
     } else if (deltaX < -SWIPE_THRESHOLD) {
       triggerSwipe('left');
+    } else {
+      deltaX = 0;
     }
-    // If not past threshold, card snaps back via CSS transition
   }
 
   function triggerSwipe(direction: 'left' | 'right') {
@@ -69,8 +94,7 @@
     setTimeout(() => {
       swiping = false;
       swipeDirection = null;
-      startX = 0;
-      currentX = 0;
+      deltaX = 0;
 
       if (direction === 'left') {
         onSwipeLeft();
@@ -84,28 +108,26 @@
 <div
   class="swipe-card"
   style={cardStyle}
-  onpointerdown={handlePointerDown}
-  onpointermove={handlePointerMove}
-  onpointerup={handlePointerUp}
+  ontouchstart={handleTouchStart}
+  ontouchmove={handleTouchMove}
+  ontouchend={handleTouchEnd}
+  onmousedown={handleMouseDown}
   role="button"
   tabindex="0"
 >
-  <!-- Swipe feedback overlays -->
-  {#if overlayStyle() === 'keep'}
+  {#if feedbackLabel === 'keep'}
     <div class="swipe-overlay keep">KEEP</div>
   {/if}
-  {#if overlayStyle() === 'reject'}
+  {#if feedbackLabel === 'reject'}
     <div class="swipe-overlay reject">DELETE</div>
   {/if}
 
-  <!-- Placeholder art -->
   <div class="art-placeholder">
     <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64">
       <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
     </svg>
   </div>
 
-  <!-- Track info -->
   <div class="track-info">
     <h2 class="title">{track.title}</h2>
     <p class="artist">{track.artist || 'Unknown Artist'}</p>
@@ -113,7 +135,6 @@
     <p class="play-count">Played {track.play_count} time{track.play_count !== 1 ? 's' : ''}</p>
   </div>
 
-  <!-- Swipe hints -->
   <div class="swipe-hints">
     <span class="hint hint-left">← Delete</span>
     <span class="hint hint-right">Keep →</span>
@@ -130,13 +151,18 @@
     align-items: center;
     gap: 1.25rem;
     user-select: none;
-    touch-action: none;
+    touch-action: pan-y;
     position: relative;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     width: 100%;
     max-width: 340px;
     margin: 0 auto;
+    cursor: grab;
+  }
+
+  .swipe-card:active {
+    cursor: grabbing;
   }
 
   .swipe-overlay {

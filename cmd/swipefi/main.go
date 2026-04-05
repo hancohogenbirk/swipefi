@@ -70,8 +70,11 @@ func run() error {
 	// Library scanner (music dir may be empty on first run)
 	scanner := library.NewScanner(musicDir, s)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Player
-	p, err := player.New(s, musicDir, deleteDir, port)
+	p, err := player.New(ctx, s, musicDir, deleteDir, port)
 	if err != nil {
 		return fmt.Errorf("create player: %w", err)
 	}
@@ -90,9 +93,6 @@ func run() error {
 	a := api.NewAPI(s, scanner, p, discovery, hub)
 
 	// Handle music dir changes from the settings UI
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
 		slog.Info("music directory changed", "path", newMusicDir)
 		scanner.SetMusicDir(newMusicDir)
