@@ -229,7 +229,7 @@ func (p *Player) Next(ctx context.Context) error {
 		return nil
 	}
 
-	p.checkPlayCountLocked(ctx)
+	p.checkPlayCountLocked(ctx, true) // user explicitly skipped → always count
 
 	if p.queue.Next() == nil {
 		// End of queue
@@ -253,7 +253,7 @@ func (p *Player) Prev(ctx context.Context) error {
 		return nil
 	}
 
-	p.checkPlayCountLocked(ctx)
+	p.checkPlayCountLocked(ctx, false) // going back → use 60s threshold
 
 	if p.queue.Prev() == nil {
 		return nil // Already at the beginning
@@ -320,18 +320,23 @@ func (p *Player) Reject(ctx context.Context) error {
 	return p.playCurrentLocked(ctx)
 }
 
-// checkPlayCountLocked checks if we've listened long enough to count a play.
-func (p *Player) checkPlayCountLocked(ctx context.Context) {
+// checkPlayCountLocked increments play count if not already counted.
+// force=true always counts (user skipped/swiped). force=false only counts after 60s.
+func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
 	if p.playCounted {
 		return
 	}
 
-	total := p.accumulatedMs
-	if p.state == StatePlaying {
-		total += time.Since(p.playStartTime).Milliseconds()
+	shouldCount := force
+	if !shouldCount {
+		total := p.accumulatedMs
+		if p.state == StatePlaying {
+			total += time.Since(p.playStartTime).Milliseconds()
+		}
+		shouldCount = total >= 60_000
 	}
 
-	if total >= 60_000 {
+	if shouldCount {
 		track := p.queue.Current()
 		if track != nil {
 			p.store.IncrementPlayCount(ctx, track.ID)
@@ -406,7 +411,7 @@ func (p *Player) pollOnce(ctx context.Context) {
 	// Check if track ended naturally
 	if tState == dlna.StateStopped && p.state == StatePlaying {
 		slog.Info("track ended naturally")
-		p.checkPlayCountLocked(ctx)
+		p.checkPlayCountLocked(ctx, true) // finished naturally → count
 
 		if p.queue.Next() == nil {
 			p.state = StateIdle
