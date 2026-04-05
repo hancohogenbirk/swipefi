@@ -41,26 +41,11 @@
   let shortcuts = $state<{ name: string; path: string }[]>([]);
 
   async function loadShortcuts() {
-    // Try common mount points for NAS shares
-    const paths = [
-      '/run/user/1000/gvfs',
-      '/mnt',
-      '/media',
-      '/volume1/music',  // Synology Docker
-      '/music',          // Docker default
-    ];
-
-    for (const p of paths) {
-      try {
-        const result = await api.browse(p);
-        if (result.entries.length > 0) {
-          for (const entry of result.entries) {
-            shortcuts = [...shortcuts, { name: entry.name, path: entry.path }];
-          }
-        }
-      } catch {
-        // path doesn't exist, skip
-      }
+    try {
+      const result = await api.shortcuts();
+      shortcuts = result ?? [];
+    } catch {
+      // no shortcuts available
     }
   }
 

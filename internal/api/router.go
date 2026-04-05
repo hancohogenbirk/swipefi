@@ -65,6 +65,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		// Config
 		r.Get("/config", api.GetAppConfig)
 		r.Post("/config/music-dir", api.SetMusicDir)
+		r.Get("/browse/shortcuts", api.BrowseShortcuts)
 		r.Get("/browse", api.BrowseFilesystem)
 	})
 

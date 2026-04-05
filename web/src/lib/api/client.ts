@@ -71,6 +71,7 @@ export const api = {
   config: () => request<{ music_dir: string; delete_dir: string }>('GET', '/api/config'),
   setMusicDir: (path: string) =>
     request<{ status: string; music_dir: string; delete_dir: string }>('POST', '/api/config/music-dir', { path }),
+  shortcuts: () => request<{ name: string; path: string }[]>('GET', '/api/browse/shortcuts'),
   browse: (path = '/') =>
     request<{ current: string; parent: string; entries: { name: string; path: string; is_dir: boolean }[] }>(
       'GET', `/api/browse?path=${encodeURIComponent(path)}`
