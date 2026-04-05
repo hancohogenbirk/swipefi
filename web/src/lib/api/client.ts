@@ -67,6 +67,15 @@ export const api = {
   reject: () => request<PlayerState>('POST', '/api/player/reject'),
   playerState: () => request<PlayerState>('GET', '/api/player/state'),
 
+  // Config
+  config: () => request<{ music_dir: string; delete_dir: string }>('GET', '/api/config'),
+  setMusicDir: (path: string) =>
+    request<{ status: string; music_dir: string; delete_dir: string }>('POST', '/api/config/music-dir', { path }),
+  browse: (path = '/') =>
+    request<{ current: string; parent: string; entries: { name: string; path: string; is_dir: boolean }[] }>(
+      'GET', `/api/browse?path=${encodeURIComponent(path)}`
+    ),
+
   // Devices
   devices: () => request<Device[]>('GET', '/api/devices'),
   selectDevice: (udn: string) => request<{ status: string; device: string }>('POST', '/api/devices/select', { udn }),

@@ -1,12 +1,16 @@
 <script lang="ts">
-  import { api, type Folder } from '../api/client';
+  import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState } from '../stores/player.svelte';
 
-  let { onNavigateToPlayer }: { onNavigateToPlayer: () => void } = $props();
+  let { onNavigateToPlayer, onOpenSettings }: {
+    onNavigateToPlayer: () => void;
+    onOpenSettings: () => void;
+  } = $props();
 
   let currentPath = $state('');
   let folders = $state<Folder[]>([]);
+  let trackCount = $state(0);
   let loading = $state(false);
   let error = $state('');
 
@@ -18,8 +22,11 @@
     loading = true;
     error = '';
     try {
-      folders = await api.folders(path);
+      folders = (await api.folders(path)) ?? [];
       currentPath = path;
+      // Also check how many tracks are in this folder
+      const tracks = await api.tracks(path || '', getSort(), getOrder());
+      trackCount = tracks?.length ?? 0;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load folders';
     } finally {
@@ -72,16 +79,31 @@
         <button class="crumb" onclick={() => navigateToBreadcrumb(i)}>{part}</button>
       {/each}
     </div>
-    <select class="sort-select" onchange={handleSortChange} value={`${getSort()}:${getOrder()}`}>
-      <option value="added_at:desc">Newest first</option>
-      <option value="added_at:asc">Oldest first</option>
-      <option value="play_count:asc">Least played</option>
-      <option value="play_count:desc">Most played</option>
-    </select>
+    <div class="header-actions">
+      <select class="sort-select" onchange={handleSortChange} value={`${getSort()}:${getOrder()}`}>
+        <option value="added_at:desc">Newest first</option>
+        <option value="added_at:asc">Oldest first</option>
+        <option value="play_count:asc">Least played</option>
+        <option value="play_count:desc">Most played</option>
+      </select>
+      <button class="icon-btn" onclick={onOpenSettings} aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
   {#if error}
     <div class="error">{error}</div>
+  {/if}
+
+  <!-- Play all button for current folder -->
+  {#if trackCount > 0}
+    <button class="play-all-btn" onclick={() => playFolder(currentPath)}>
+      <span class="play-all-icon">▶</span>
+      <span>Play all {trackCount} tracks</span>
+    </button>
   {/if}
 
   {#if loading}
@@ -107,8 +129,8 @@
         </div>
       {/each}
 
-      {#if folders.length === 0 && !currentPath}
-        <div class="empty">No folders found. Check your music directory.</div>
+      {#if folders.length === 0 && trackCount === 0 && !currentPath}
+        <div class="empty">No folders found. Check your music directory in settings.</div>
       {/if}
     </div>
   {/if}
@@ -158,6 +180,13 @@
     font-size: 0.8rem;
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
   .sort-select {
     background: #222;
     color: #f0f0f0;
@@ -165,7 +194,45 @@
     border-radius: 8px;
     padding: 0.5rem;
     font-size: 0.85rem;
-    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+  }
+
+  .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  .play-all-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: linear-gradient(135deg, #1db954, #17a34a);
+    border: none;
+    border-radius: 12px;
+    padding: 0.85rem 1.25rem;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 0.75rem;
+  }
+
+  .play-all-btn:hover {
+    filter: brightness(1.1);
+  }
+
+  .play-all-icon {
+    font-size: 0.9rem;
   }
 
   .folder-list {

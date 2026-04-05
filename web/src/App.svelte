@@ -4,8 +4,11 @@
   import { api, type Device } from './lib/api/client';
   import FolderNav from './lib/components/FolderNav.svelte';
   import NowPlaying from './lib/components/NowPlaying.svelte';
+  import Settings from './lib/components/Settings.svelte';
 
-  type View = 'loading' | 'setup' | 'folders' | 'player';
+  type View = 'loading' | 'choose-dir' | 'setup' | 'folders' | 'player' | 'settings';
+
+  let previousView = $state<View>('folders');
 
   let view = $state<View>('loading');
   let devices = $state<Device[]>([]);
@@ -16,30 +19,60 @@
 
   onMount(async () => {
     try {
-      devices = await api.devices();
-      await loadInitialState();
+      // Check if music directory is configured
+      const config = await api.config();
       connectWebSocket();
 
+      if (!config.music_dir) {
+        view = 'choose-dir';
+        return;
+      }
+
+      await loadInitialState();
+
+      // Discover devices
+      devices = await api.devices();
       if (devices.length === 0) {
-        devices = await api.scanDevices();
+        try {
+          devices = await api.scanDevices();
+        } catch {
+          // scan can be slow, don't block
+        }
       }
 
       if (devices.length === 0) {
         view = 'setup';
       } else if (devices.length === 1) {
         await selectDevice(devices[0].udn);
-        view = playerState.state !== 'idle' ? 'player' : 'folders';
       } else {
         view = 'setup';
       }
-    } catch {
-      view = 'setup';
+    } catch (e) {
+      console.error('[swipefi] init error:', e);
+      view = 'choose-dir';
     }
   });
 
   onDestroy(() => {
     disconnectWebSocket();
   });
+
+  async function onMusicDirChosen() {
+    // Music dir is now set, proceed to device selection
+    view = 'loading';
+    devices = await api.devices();
+    if (devices.length === 0) {
+      try { devices = await api.scanDevices(); } catch { /* */ }
+    }
+
+    if (devices.length === 0) {
+      view = 'setup';
+    } else if (devices.length === 1) {
+      await selectDevice(devices[0].udn);
+    } else {
+      view = 'setup';
+    }
+  }
 
   async function selectDevice(udn: string) {
     try {
@@ -71,6 +104,16 @@
   function navigateToFolders() {
     view = 'folders';
   }
+
+  function openSettings() {
+    previousView = view as View;
+    view = 'settings';
+  }
+
+  function closeSettings() {
+    // After settings change, always go to folders (music dir may have changed)
+    view = 'folders';
+  }
 </script>
 
 <div class="app">
@@ -79,6 +122,9 @@
       <h1 class="logo">SwipeFi</h1>
       <p class="subtitle">Loading...</p>
     </div>
+
+  {:else if view === 'choose-dir'}
+    <Settings onDone={onMusicDirChosen} />
 
   {:else if view === 'setup'}
     <div class="center-screen">
@@ -102,10 +148,12 @@
       </button>
     </div>
 
-  {:else if view === 'folders'}
-    <FolderNav onNavigateToPlayer={navigateToPlayer} />
+  {:else if view === 'settings'}
+    <Settings onDone={closeSettings} />
 
-    <!-- Mini player bar when something is playing -->
+  {:else if view === 'folders'}
+    <FolderNav onNavigateToPlayer={navigateToPlayer} onOpenSettings={openSettings} />
+
     {#if playerState.state !== 'idle' && playerState.track}
       <button class="mini-player" onclick={navigateToPlayer}>
         <div class="mini-info">

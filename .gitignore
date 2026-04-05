@@ -6,8 +6,10 @@ vendor/
 # Frontend
 web/node_modules/
 web/dist/
+web/test-results/
 
 # Database
+data/
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal

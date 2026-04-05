@@ -26,35 +26,15 @@ func main() {
 }
 
 func run() error {
-	// Config from environment with defaults
 	port := envOr("SWIPEFI_PORT", "8080")
-	musicDir := envOr("SWIPEFI_MUSIC_DIR", "./music")
 	dataDir := envOr("SWIPEFI_DATA_DIR", "./data")
-	deleteDir := envOr("SWIPEFI_DELETE_DIR", filepath.Join(musicDir, "to_delete"))
 
-	// Setup logging
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
 
-	slog.Info("starting swipefi",
-		"port", port,
-		"music_dir", musicDir,
-		"data_dir", dataDir,
-		"delete_dir", deleteDir,
-	)
-
-	// Ensure directories exist
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
-	}
-	if err := os.MkdirAll(deleteDir, 0755); err != nil {
-		return fmt.Errorf("create delete dir: %w", err)
-	}
-
-	// Verify music directory exists
-	if _, err := os.Stat(musicDir); os.IsNotExist(err) {
-		return fmt.Errorf("music directory does not exist: %s", musicDir)
 	}
 
 	// Open database
@@ -65,7 +45,27 @@ func run() error {
 	}
 	defer s.Close()
 
-	// Library scanner
+	// Determine music dir: env var overrides DB config
+	musicDir := os.Getenv("SWIPEFI_MUSIC_DIR")
+	if musicDir == "" {
+		musicDir, _ = s.GetConfig("music_dir")
+	}
+	deleteDir := os.Getenv("SWIPEFI_DELETE_DIR")
+	if deleteDir == "" {
+		deleteDir, _ = s.GetConfig("delete_dir")
+	}
+	if musicDir != "" && deleteDir == "" {
+		deleteDir = filepath.Join(musicDir, "to_delete")
+	}
+
+	slog.Info("starting swipefi",
+		"port", port,
+		"music_dir", musicDir,
+		"data_dir", dataDir,
+		"delete_dir", deleteDir,
+	)
+
+	// Library scanner (music dir may be empty on first run)
 	scanner := library.NewScanner(musicDir, s)
 
 	// Player
@@ -80,31 +80,51 @@ func run() error {
 	// WebSocket hub
 	hub := api.NewHub()
 
-	// Wire player state changes to WebSocket broadcast
 	p.SetOnChange(func(state player.PlayerState) {
 		hub.Broadcast(state)
 	})
 
 	// API and router
 	a := api.NewAPI(s, scanner, p, discovery, hub)
-	router := api.NewRouter(a, musicDir)
 
+	// Handle music dir changes from the settings UI
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Run initial library scan in background
-	go func() {
-		count, err := scanner.Scan(ctx)
-		if err != nil {
-			slog.Error("initial scan failed", "err", err)
-			return
-		}
-		slog.Info("initial scan done", "tracks", count)
-	}()
+	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
+		slog.Info("music directory changed", "path", newMusicDir)
+		scanner.SetMusicDir(newMusicDir)
+		p.SetDirs(newMusicDir, newDeleteDir)
+		os.MkdirAll(newDeleteDir, 0755)
 
-	// Run initial DLNA discovery in background
+		// Trigger a rescan in background
+		go func() {
+			count, err := scanner.Scan(ctx)
+			if err != nil {
+				slog.Error("rescan after config change", "err", err)
+				return
+			}
+			slog.Info("rescan complete", "tracks", count)
+		}()
+	})
+
+	router := api.NewRouter(a)
+
+	// If we already have a music dir, scan on startup
+	if musicDir != "" {
+		os.MkdirAll(deleteDir, 0755)
+		go func() {
+			count, err := scanner.Scan(ctx)
+			if err != nil {
+				slog.Error("initial scan failed", "err", err)
+				return
+			}
+			slog.Info("initial scan done", "tracks", count)
+		}()
+	}
+
+	// DLNA discovery in background
 	go func() {
-		// Small delay to let the network settle
 		time.Sleep(2 * time.Second)
 		if err := discovery.Scan(ctx); err != nil {
 			slog.Error("initial discovery failed", "err", err)
@@ -117,7 +137,6 @@ func run() error {
 		Handler: router,
 	}
 
-	// Graceful shutdown
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

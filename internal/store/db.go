@@ -24,6 +24,10 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := s.migrateConfig(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate config: %w", err)
+	}
 
 	return s, nil
 }

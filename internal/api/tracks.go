@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"swipefi/internal/library"
+
 	"swipefi/internal/store"
 )
 
@@ -31,6 +33,10 @@ func (a *API) ListFolders(w http.ResponseWriter, r *http.Request) {
 		slog.Error("list folders", "path", path, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to list folders")
 		return
+	}
+
+	if folders == nil {
+		folders = []library.FolderEntry{}
 	}
 
 	writeJSON(w, http.StatusOK, folders)

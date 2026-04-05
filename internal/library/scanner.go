@@ -20,6 +20,14 @@ func NewScanner(musicDir string, s *store.Store) *Scanner {
 	return &Scanner{musicDir: musicDir, store: s}
 }
 
+func (sc *Scanner) SetMusicDir(dir string) {
+	sc.musicDir = dir
+}
+
+func (sc *Scanner) MusicDir() string {
+	return sc.musicDir
+}
+
 func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	slog.Info("starting library scan", "dir", sc.musicDir)
 

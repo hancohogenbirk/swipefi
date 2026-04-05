@@ -14,18 +14,23 @@ import (
 )
 
 type API struct {
-	store     *store.Store
-	scanner   *library.Scanner
-	player    *player.Player
-	discovery *dlna.Discovery
-	hub       *Hub
+	store             *store.Store
+	scanner           *library.Scanner
+	player            *player.Player
+	discovery         *dlna.Discovery
+	hub               *Hub
+	onMusicDirChanged func(musicDir, deleteDir string)
 }
 
 func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, hub *Hub) *API {
 	return &API{store: s, scanner: scanner, player: p, discovery: d, hub: hub}
 }
 
-func NewRouter(api *API, musicDir string) *chi.Mux {
+func (a *API) SetOnMusicDirChanged(fn func(musicDir, deleteDir string)) {
+	a.onMusicDirChanged = fn
+}
+
+func NewRouter(api *API) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -55,14 +60,26 @@ func NewRouter(api *API, musicDir string) *chi.Mux {
 		r.Get("/devices", api.ListDevices)
 		r.Post("/devices/select", api.SelectDevice)
 		r.Post("/devices/scan", api.RescanDevices)
+
+		// Config
+		r.Get("/config", api.GetAppConfig)
+		r.Post("/config/music-dir", api.SetMusicDir)
+		r.Get("/browse", api.BrowseFilesystem)
 	})
 
 	// WebSocket
 	r.Get("/ws", api.hub.HandleWS)
 
-	// Raw audio file streaming
-	fileServer := http.StripPrefix("/stream/", http.FileServer(http.Dir(musicDir)))
-	r.Handle("/stream/*", fileServer)
+	// Raw audio file streaming — uses scanner's current music dir
+	r.Handle("/stream/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		musicDir := api.scanner.MusicDir()
+		if musicDir == "" {
+			http.Error(w, "music directory not configured", http.StatusServiceUnavailable)
+			return
+		}
+		handler := http.StripPrefix("/stream/", http.FileServer(http.Dir(musicDir)))
+		handler.ServeHTTP(w, r)
+	}))
 
 	return r
 }

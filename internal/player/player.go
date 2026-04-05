@@ -86,6 +86,13 @@ func (p *Player) SetOnChange(fn StateChangeFunc) {
 	p.onChange = fn
 }
 
+func (p *Player) SetDirs(musicDir, deleteDir string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.musicDir = musicDir
+	p.deleteDir = deleteDir
+}
+
 func (p *Player) SetTransport(t *dlna.Transport) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
