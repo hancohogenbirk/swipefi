@@ -45,7 +45,10 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		}
 
 		if d.IsDir() {
-			if d.Name() == "to_delete" {
+			name := d.Name()
+			// Skip Synology system dirs, recycle bins, hidden dirs, and to_delete
+			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
+				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -136,13 +139,21 @@ func (sc *Scanner) ListFolders(path string) ([]FolderEntry, error) {
 		if !e.IsDir() {
 			continue
 		}
-		if e.Name() == "to_delete" || strings.HasPrefix(e.Name(), ".") {
+		name := e.Name()
+		if name == "to_delete" || name == "#recycle" ||
+			strings.HasPrefix(name, ".") || strings.HasPrefix(name, "@") {
 			continue
 		}
-		folders = append(folders, FolderEntry{
-			Name: e.Name(),
-			Path: filepath.ToSlash(filepath.Join(path, e.Name())),
-		})
+
+		folderPath := filepath.ToSlash(filepath.Join(path, name))
+
+		// Only include folders that have tracks (recursively) in the DB
+		if sc.store.HasTracksInFolder(folderPath) {
+			folders = append(folders, FolderEntry{
+				Name: name,
+				Path: folderPath,
+			})
+		}
 	}
 
 	return folders, nil

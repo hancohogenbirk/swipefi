@@ -158,6 +158,16 @@ func (s *Store) MarkDeleted(ctx context.Context, id int64) error {
 	return nil
 }
 
+// HasTracksInFolder returns true if there are any non-deleted tracks under the given folder.
+func (s *Store) HasTracksInFolder(folder string) bool {
+	var count int
+	err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM tracks WHERE deleted = 0 AND path LIKE ?",
+		folder+"/%",
+	).Scan(&count)
+	return err == nil && count > 0
+}
+
 func (s *Store) TrackCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0").Scan(&count)
