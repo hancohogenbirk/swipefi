@@ -13,4 +13,23 @@ body {
   color: #f0f0f0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent mobile browser tap highlights and selection */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Disable tap highlight on all interactive elements */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid #1db954;
+  outline-offset: 2px;
+}
+
+/* Prevent text selection on UI elements during interaction */
+select, button, [role="button"] {
+  user-select: none;
 }

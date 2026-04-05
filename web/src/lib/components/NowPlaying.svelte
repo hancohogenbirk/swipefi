@@ -7,27 +7,30 @@
 
   let { onBack, onOpenQueue }: { onBack: () => void; onOpenQueue: () => void } = $props();
 
-  let state = $derived(getPlayerState());
-  let track = $derived(state.track);
+  let ps = $derived(getPlayerState());
+  let track = $derived(ps.track);
+  let transitioning = $state(false);
 
   async function handleSwipeLeft() {
+    transitioning = true;
     try {
-      console.log('[swipefi] swipe left → reject');
       const s = await api.reject();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] reject failed:', e);
     }
+    transitioning = false;
   }
 
   async function handleSwipeRight() {
+    transitioning = true;
     try {
-      console.log('[swipefi] swipe right → next');
       const s = await api.next();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] next failed:', e);
     }
+    transitioning = false;
   }
 </script>
 
@@ -42,14 +45,14 @@
       <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
         <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
       </svg>
-      {#if state.queue_length > 0}
-        <span class="queue-count">{state.queue_position + 1}/{state.queue_length}</span>
+      {#if ps.queue_length > 0}
+        <span class="queue-count">{ps.queue_position + 1}/{ps.queue_length}</span>
       {/if}
     </button>
   </header>
 
   <div class="card-area">
-    {#if track}
+    {#if track && !transitioning}
       {#key track.id}
         <SwipeCard
           {track}
@@ -57,7 +60,7 @@
           onSwipeRight={handleSwipeRight}
         />
       {/key}
-    {:else}
+    {:else if !track}
       <div class="idle-message">
         <p>No track playing</p>
         <button class="back-link" onclick={onBack}>Browse folders</button>

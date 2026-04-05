@@ -204,11 +204,18 @@
 
     {#if playerState.state !== 'idle' && playerState.track}
       <button class="mini-player" onclick={navigateToPlayer}>
+        <img
+          src="/api/tracks/{playerState.track.id}/art"
+          alt=""
+          class="mini-art"
+          onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+        />
         <div class="mini-info">
           <span class="mini-title">{playerState.track.title}</span>
           <span class="mini-artist">{playerState.track.artist || 'Unknown'}</span>
         </div>
         <span class="mini-state">{playerState.state === 'playing' ? '▶' : '⏸'}</span>
+        <div class="mini-progress" style="width: {playerState.duration_ms ? (playerState.position_ms / playerState.duration_ms * 100) : 0}%"></div>
       </button>
     {/if}
 
@@ -329,25 +336,32 @@
   .mini-player {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.75rem;
     background: #1a1a1a;
     border: none;
     border-top: 1px solid #333;
     color: #f0f0f0;
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 1rem;
     cursor: pointer;
     width: 100%;
     text-align: left;
+    position: relative;
+    overflow: hidden;
   }
 
-  .mini-player:hover {
-    background: #222;
+  .mini-art {
+    width: 42px;
+    height: 42px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
   }
 
   .mini-info {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    flex: 1;
   }
 
   .mini-title {
@@ -366,5 +380,14 @@
   .mini-state {
     font-size: 1.2rem;
     flex-shrink: 0;
+  }
+
+  .mini-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: #1db954;
+    transition: width 1s linear;
   }
 </style>
