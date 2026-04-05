@@ -54,10 +54,30 @@ func (a *API) GetTrackArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract from file
+	// Check if we already know there's no art (avoid re-scraping)
+	if hasNoArtMarker(cacheDir, id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Try extracting embedded art from the file
 	fullPath := filepath.Join(musicDir, filepath.FromSlash(track.Path))
 	art, err := library.ExtractArt(fullPath)
-	if err != nil || art == nil {
+
+	// If no embedded art, try scraping from MusicBrainz/Cover Art Archive
+	if (err != nil || art == nil) && track.Artist != "" && track.Album != "" {
+		slog.Info("no embedded art, trying MusicBrainz", "artist", track.Artist, "album", track.Album)
+		scraped, scrapErr := library.FetchCoverArt(track.Artist, track.Album)
+		if scrapErr != nil {
+			slog.Warn("cover art scrape failed", "err", scrapErr)
+		} else if scraped != nil {
+			art = scraped
+		}
+	}
+
+	if art == nil {
+		// Cache a "no art" marker so we don't re-scrape every request
+		cacheNoArt(cacheDir, id)
 		http.NotFound(w, r)
 		return
 	}
@@ -88,6 +108,18 @@ func readCachedArt(cacheDir string, trackID int64) ([]byte, string, error) {
 		}
 	}
 	return nil, "", os.ErrNotExist
+}
+
+func hasNoArtMarker(cacheDir string, trackID int64) bool {
+	path := filepath.Join(cacheDir, fmt.Sprintf("%d.noart", trackID))
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func cacheNoArt(cacheDir string, trackID int64) {
+	os.MkdirAll(cacheDir, 0755)
+	path := filepath.Join(cacheDir, fmt.Sprintf("%d.noart", trackID))
+	os.WriteFile(path, []byte("no art"), 0644)
 }
 
 func cacheArt(cacheDir string, trackID int64, data []byte, mimeType string) error {
