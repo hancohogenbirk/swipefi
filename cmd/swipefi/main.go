@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"swipefi/internal/library"
 	"swipefi/internal/player"
 	"swipefi/internal/store"
+	"swipefi/web"
 )
 
 func main() {
@@ -108,7 +110,18 @@ func run() error {
 		}()
 	})
 
-	router := api.NewRouter(a)
+	// Embedded frontend (built into the binary)
+	var frontendFS fs.FS
+	distFS, err := fs.Sub(web.DistFS, "dist")
+	if err == nil {
+		// Check if the dist directory has content
+		if entries, err := fs.ReadDir(distFS, "."); err == nil && len(entries) > 0 {
+			frontendFS = distFS
+			slog.Info("serving embedded frontend")
+		}
+	}
+
+	router := api.NewRouter(a, frontendFS)
 
 	// If we already have a music dir, scan on startup
 	if musicDir != "" {

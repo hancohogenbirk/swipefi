@@ -1,0 +1,13 @@
+services:
+  swipefi:
+    build: .
+    network_mode: host  # Required for UPnP/SSDP multicast discovery
+    volumes:
+      - ${SWIPEFI_MUSIC_DIR:-/volume1/music}:/music
+      - ${SWIPEFI_DATA_DIR:-./data}:/data
+    environment:
+      - SWIPEFI_PORT=8080
+      - SWIPEFI_DATA_DIR=/data
+      # Music dir is configured in-app via Settings, or override here:
+      # - SWIPEFI_MUSIC_DIR=/music
+    restart: unless-stopped

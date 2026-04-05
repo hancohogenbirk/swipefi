@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -30,7 +31,7 @@ func (a *API) SetOnMusicDirChanged(fn func(musicDir, deleteDir string)) {
 	a.onMusicDirChanged = fn
 }
 
-func NewRouter(api *API) *chi.Mux {
+func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -80,6 +81,11 @@ func NewRouter(api *API) *chi.Mux {
 		handler := http.StripPrefix("/stream/", http.FileServer(http.Dir(musicDir)))
 		handler.ServeHTTP(w, r)
 	}))
+
+	// Serve embedded frontend (catch-all, must be last)
+	if frontendFS != nil {
+		r.NotFound(ServeFrontend(frontendFS).ServeHTTP)
+	}
 
 	return r
 }
