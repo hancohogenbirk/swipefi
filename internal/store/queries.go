@@ -34,12 +34,43 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 			artist = excluded.artist,
 			album = excluded.album,
 			duration_ms = excluded.duration_ms,
-			format = excluded.format
+			format = excluded.format,
+			deleted = 0
 	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now)
 	if err != nil {
 		return fmt.Errorf("upsert track: %w", err)
 	}
 	return nil
+}
+
+// MarkMissingAsDeleted marks tracks as deleted if their path is not in the provided set.
+func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool) (int, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
+	if err != nil {
+		return 0, fmt.Errorf("query tracks: %w", err)
+	}
+	defer rows.Close()
+
+	var toDelete []int64
+	for rows.Next() {
+		var id int64
+		var path string
+		if err := rows.Scan(&id, &path); err != nil {
+			return 0, fmt.Errorf("scan: %w", err)
+		}
+		if !existingPaths[path] {
+			toDelete = append(toDelete, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, id := range toDelete {
+		s.db.ExecContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?", id)
+	}
+
+	return len(toDelete), nil
 }
 
 func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {

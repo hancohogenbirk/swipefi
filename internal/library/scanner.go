@@ -31,11 +31,13 @@ func (sc *Scanner) MusicDir() string {
 func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	slog.Info("starting library scan", "dir", sc.musicDir)
 
+	existingPaths := make(map[string]bool)
 	var count int
+
 	err := filepath.WalkDir(sc.musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			slog.Warn("walk error", "path", path, "err", err)
-			return nil // skip errors, continue scanning
+			return nil
 		}
 
 		if ctx.Err() != nil {
@@ -43,7 +45,6 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		}
 
 		if d.IsDir() {
-			// Skip the to_delete directory
 			if d.Name() == "to_delete" {
 				return filepath.SkipDir
 			}
@@ -58,8 +59,8 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		if err != nil {
 			return nil
 		}
-		// Normalize to forward slashes for consistent storage
 		relPath = filepath.ToSlash(relPath)
+		existingPaths[relPath] = true
 
 		meta, err := ReadMetadata(path, relPath)
 		if err != nil {
@@ -94,7 +95,15 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		return count, err
 	}
 
-	slog.Info("library scan complete", "tracks", count)
+	// Mark tracks whose files no longer exist on disk
+	orphaned, err := sc.store.MarkMissingAsDeleted(ctx, existingPaths)
+	if err != nil {
+		slog.Warn("cleanup orphaned tracks failed", "err", err)
+	} else if orphaned > 0 {
+		slog.Info("marked orphaned tracks as deleted", "count", orphaned)
+	}
+
+	slog.Info("library scan complete", "tracks_found", count, "orphaned", orphaned)
 	return count, nil
 }
 
