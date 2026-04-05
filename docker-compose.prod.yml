@@ -15,6 +15,7 @@ services:
   swipefi:
     image: ghcr.io/hancohogenbirk/swipefi:latest
     container_name: swipefi
+    pull_policy: always
     network_mode: host  # Required for UPnP/SSDP multicast (WiiM discovery)
     volumes:
       - /volume1/audio:/audio               # NAS audio share → /audio in container
