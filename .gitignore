@@ -1,0 +1,29 @@
+# Go
+/swipefi
+*.exe
+vendor/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Database
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local

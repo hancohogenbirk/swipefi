@@ -1,0 +1,57 @@
+package store
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+
+	_ "modernc.org/sqlite"
+)
+
+type Store struct {
+	db *sql.DB
+}
+
+func New(dbPath string) (*Store, error) {
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		return nil, fmt.Errorf("open db: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	return s, nil
+}
+
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
+func (s *Store) migrate() error {
+	slog.Info("running database migrations")
+	_, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS tracks (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			path        TEXT UNIQUE NOT NULL,
+			title       TEXT NOT NULL DEFAULT '',
+			artist      TEXT NOT NULL DEFAULT '',
+			album       TEXT NOT NULL DEFAULT '',
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			format      TEXT NOT NULL DEFAULT '',
+			play_count  INTEGER NOT NULL DEFAULT 0,
+			added_at    INTEGER NOT NULL,
+			last_played INTEGER,
+			deleted     INTEGER NOT NULL DEFAULT 0,
+			created_at  INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count);
+		CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at);
+		CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path);
+	`)
+	return err
+}

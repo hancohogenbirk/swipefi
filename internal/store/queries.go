@@ -1,0 +1,134 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+)
+
+type Track struct {
+	ID         int64  `json:"id"`
+	Path       string `json:"path"`
+	Title      string `json:"title"`
+	Artist     string `json:"artist"`
+	Album      string `json:"album"`
+	DurationMs int64  `json:"duration_ms"`
+	Format     string `json:"format"`
+	PlayCount  int    `json:"play_count"`
+	AddedAt    int64  `json:"added_at"`
+	LastPlayed *int64 `json:"last_played,omitempty"`
+	Deleted    bool   `json:"-"`
+}
+
+var ErrTrackNotFound = errors.New("track not found")
+
+func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(path) DO UPDATE SET
+			title = excluded.title,
+			artist = excluded.artist,
+			album = excluded.album,
+			duration_ms = excluded.duration_ms,
+			format = excluded.format
+	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now)
+	if err != nil {
+		return fmt.Errorf("upsert track: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
+	var t Track
+	var lastPlayed sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		FROM tracks WHERE id = ?
+	`, id).Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs, &t.Format,
+		&t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted)
+	if err == sql.ErrNoRows {
+		return nil, ErrTrackNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get track %d: %w", id, err)
+	}
+	if lastPlayed.Valid {
+		t.LastPlayed = &lastPlayed.Int64
+	}
+	return &t, nil
+}
+
+func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
+	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		FROM tracks WHERE deleted = 0`
+
+	var args []any
+	if folder != "" {
+		query += " AND path LIKE ?"
+		args = append(args, folder+"/%")
+	}
+
+	sortCol := "added_at"
+	if sortBy == "play_count" {
+		sortCol = "play_count"
+	}
+
+	orderDir := "ASC"
+	if order == "desc" {
+		orderDir = "DESC"
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s %s", sortCol, orderDir)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tracks: %w", err)
+	}
+	defer rows.Close()
+
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		var lastPlayed sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			return nil, fmt.Errorf("scan track: %w", err)
+		}
+		if lastPlayed.Valid {
+			t.LastPlayed = &lastPlayed.Int64
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, rows.Err()
+}
+
+func (s *Store) IncrementPlayCount(ctx context.Context, id int64) error {
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?
+	`, now, id)
+	if err != nil {
+		return fmt.Errorf("increment play count %d: %w", id, err)
+	}
+	return nil
+}
+
+func (s *Store) MarkDeleted(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE tracks SET deleted = 1 WHERE id = ?
+	`, id)
+	if err != nil {
+		return fmt.Errorf("mark deleted %d: %w", id, err)
+	}
+	return nil
+}
+
+func (s *Store) TrackCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0").Scan(&count)
+	return count, err
+}
