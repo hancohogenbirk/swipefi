@@ -32,7 +32,7 @@
 
       await loadInitialState();
 
-      // Check if a scan is running
+      // Always check and poll scan progress
       scanProgress = await api.scanStatus();
       if (scanProgress.scanning) {
         startScanPolling();
@@ -111,6 +111,11 @@
     try {
       await api.selectDevice(udn);
       selectedDevice = udn;
+      // Check if scan is still running before going to folders
+      scanProgress = await api.scanStatus();
+      if (scanProgress.scanning) {
+        startScanPolling();
+      }
       view = 'folders';
       error = '';
     } catch (e) {
@@ -177,6 +182,18 @@
   {:else if view === 'setup'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
+
+      {#if scanProgress.scanning && scanProgress.total > 0}
+        <div class="scan-progress">
+          <div class="scan-bar">
+            <div class="scan-fill" style="width: {Math.round((scanProgress.scanned / scanProgress.total) * 100)}%"></div>
+          </div>
+          <p class="scan-text">Scanning: {scanProgress.scanned} / {scanProgress.total}</p>
+        </div>
+      {:else if scanProgress.scanning}
+        <p class="subtitle">Scanning library...</p>
+      {/if}
+
       <p class="subtitle">Select your audio renderer</p>
 
       {#if error}
@@ -200,6 +217,20 @@
     <Settings onDone={closeSettings} />
 
   {:else if view === 'folders'}
+    {#if scanProgress.scanning}
+      <div class="scan-banner">
+        <div class="scan-bar">
+          <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
+        </div>
+        <span class="scan-banner-text">
+          {#if scanProgress.total > 0}
+            Scanning: {scanProgress.scanned} / {scanProgress.total}
+          {:else}
+            Scanning library...
+          {/if}
+        </span>
+      </div>
+    {/if}
     <FolderNav onNavigateToPlayer={navigateToPlayer} onOpenSettings={openSettings} onNavigateHome={navigateToHome} />
 
     {#if playerState.state !== 'idle' && playerState.track}
@@ -285,6 +316,27 @@
     color: #888;
     font-size: 0.85rem;
     text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scan-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: #1a1a1a;
+    border-bottom: 1px solid #222;
+    flex-shrink: 0;
+  }
+
+  .scan-banner .scan-bar {
+    flex: 1;
+  }
+
+  .scan-banner-text {
+    font-size: 0.75rem;
+    color: #888;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
