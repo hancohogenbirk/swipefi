@@ -134,7 +134,8 @@ func (a *API) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
-	musicDir, _ := a.store.GetConfig("music_dir")
+	// Return the active music dir (scanner knows the truth)
+	musicDir := a.scanner.MusicDir()
 	deleteDir, _ := a.store.GetConfig("delete_dir")
 
 	writeJSON(w, http.StatusOK, map[string]string{
