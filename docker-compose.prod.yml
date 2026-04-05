@@ -1,19 +1,24 @@
-# Production compose file for Synology NAS
-# Place at /volume1/docker/swipefi/docker-compose.yml on your NAS
+# SwipeFi — Production compose for Synology Container Manager
 #
-# Usage:
-#   sudo docker compose pull && sudo docker compose up -d
+# Setup:
+#   1. Create folder /volume1/docker/swipefi/data in File Station
+#   2. Container Manager → Project → Create
+#   3. Project name: swipefi, Path: /volume1/docker/swipefi
+#   4. Source: "Create docker-compose.yml" → paste this file
+#   5. Replace <github-user> with your GitHub username
+#   6. Click Next → Done
 #
-# Replace <github-user> with your GitHub username below.
+# The app will be at http://your-nas:8080
+# In Settings, set music dir to /audio/Lossless/FLAC (or wherever your music is)
 
 services:
   swipefi:
     image: ghcr.io/<github-user>/swipefi:latest
     container_name: swipefi
-    network_mode: host  # Required for UPnP/SSDP multicast discovery
+    network_mode: host  # Required for UPnP/SSDP multicast (WiiM discovery)
     volumes:
-      - /volume1/audio:/audio          # Your NAS audio share
-      - /volume1/docker/swipefi/data:/data  # SQLite + config
+      - /volume1/audio:/audio               # NAS audio share → /audio in container
+      - /volume1/docker/swipefi/data:/data   # SQLite database persistence
     environment:
       - SWIPEFI_PORT=8080
       - SWIPEFI_DATA_DIR=/data
