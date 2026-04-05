@@ -45,6 +45,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		r.Get("/folders", api.ListFolders)
 		r.Get("/tracks", api.ListTracks)
 		r.Get("/tracks/{id}", api.GetTrack)
+		r.Get("/tracks/{id}/art", api.GetTrackArt)
 		r.Post("/library/scan", api.ScanLibrary)
 		r.Get("/library/scan/status", api.ScanStatus)
 

@@ -11,6 +11,8 @@
     onSwipeRight: () => void;
   } = $props();
 
+  let showPlaceholder = $state(true);
+
   const SWIPE_THRESHOLD = 80;
   const ROTATION_FACTOR = 0.1;
 
@@ -122,10 +124,21 @@
     <div class="swipe-overlay reject">DELETE</div>
   {/if}
 
-  <div class="art-placeholder">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64">
-      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-    </svg>
+  <div class="art-container">
+    <img
+      src="/api/tracks/{track.id}/art"
+      alt=""
+      class="art-image"
+      onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; showPlaceholder = true; }}
+      onload={() => showPlaceholder = false}
+    />
+    {#if showPlaceholder}
+      <div class="art-placeholder">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64">
+          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+        </svg>
+      </div>
+    {/if}
   </div>
 
   <div class="track-info">
@@ -191,11 +204,27 @@
     transform: rotate(-12deg);
   }
 
-  .art-placeholder {
-    width: 200px;
-    height: 200px;
-    background: #333;
+  .art-container {
+    width: 220px;
+    height: 220px;
+    position: relative;
     border-radius: 12px;
+    overflow: hidden;
+    background: #222;
+    flex-shrink: 0;
+  }
+
+  .art-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .art-placeholder {
+    width: 100%;
+    height: 100%;
+    background: #333;
     display: flex;
     align-items: center;
     justify-content: center;

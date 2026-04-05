@@ -10,6 +10,12 @@ import (
 	"github.com/dhowden/tag"
 )
 
+// ArtData holds extracted album art.
+type ArtData struct {
+	Data     []byte
+	MimeType string // "image/jpeg", "image/png", etc.
+}
+
 type TrackMeta struct {
 	Path       string
 	Title      string
@@ -86,4 +92,38 @@ func ReadMetadata(fullPath, relPath string) (*TrackMeta, error) {
 	_ = time.Now()
 
 	return meta, nil
+}
+
+// ExtractArt reads embedded album art from an audio file.
+// Returns nil if no art is embedded.
+func ExtractArt(fullPath string) (*ArtData, error) {
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	defer f.Close()
+
+	m, err := tag.ReadFrom(f)
+	if err != nil {
+		return nil, nil // no tags = no art
+	}
+
+	pic := m.Picture()
+	if pic == nil || len(pic.Data) == 0 {
+		return nil, nil
+	}
+
+	mime := pic.MIMEType
+	if mime == "" {
+		// Detect from data
+		if len(pic.Data) > 2 && pic.Data[0] == 0xFF && pic.Data[1] == 0xD8 {
+			mime = "image/jpeg"
+		} else if len(pic.Data) > 4 && string(pic.Data[:4]) == "\x89PNG" {
+			mime = "image/png"
+		} else {
+			mime = "image/jpeg" // default assumption
+		}
+	}
+
+	return &ArtData{Data: pic.Data, MimeType: mime}, nil
 }
