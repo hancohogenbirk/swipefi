@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"swipefi/internal/api"
+	"swipefi/internal/dlna"
 	"swipefi/internal/library"
+	"swipefi/internal/player"
 	"swipefi/internal/store"
 )
 
@@ -66,10 +68,31 @@ func run() error {
 	// Library scanner
 	scanner := library.NewScanner(musicDir, s)
 
-	// Run initial scan in background
+	// Player
+	p, err := player.New(s, musicDir, deleteDir, port)
+	if err != nil {
+		return fmt.Errorf("create player: %w", err)
+	}
+
+	// DLNA discovery
+	discovery := dlna.NewDiscovery()
+
+	// WebSocket hub
+	hub := api.NewHub()
+
+	// Wire player state changes to WebSocket broadcast
+	p.SetOnChange(func(state player.PlayerState) {
+		hub.Broadcast(state)
+	})
+
+	// API and router
+	a := api.NewAPI(s, scanner, p, discovery, hub)
+	router := api.NewRouter(a, musicDir)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Run initial library scan in background
 	go func() {
 		count, err := scanner.Scan(ctx)
 		if err != nil {
@@ -79,9 +102,14 @@ func run() error {
 		slog.Info("initial scan done", "tracks", count)
 	}()
 
-	// API and router
-	a := api.NewAPI(s, scanner)
-	router := api.NewRouter(a, musicDir)
+	// Run initial DLNA discovery in background
+	go func() {
+		// Small delay to let the network settle
+		time.Sleep(2 * time.Second)
+		if err := discovery.Scan(ctx); err != nil {
+			slog.Error("initial discovery failed", "err", err)
+		}
+	}()
 
 	// HTTP server
 	srv := &http.Server{
