@@ -3,11 +3,11 @@ services:
     build: .
     network_mode: host  # Required for UPnP/SSDP multicast discovery
     volumes:
-      - ${SWIPEFI_MUSIC_DIR:-/volume1/music}:/music
-      - ${SWIPEFI_DATA_DIR:-./data}:/data
+      - /volume1/audio:/audio        # Your NAS music share (read/write)
+      - /volume1/docker/swipefi/data:/data  # SQLite + config persistence
     environment:
       - SWIPEFI_PORT=8080
       - SWIPEFI_DATA_DIR=/data
-      # Music dir is configured in-app via Settings, or override here:
-      # - SWIPEFI_MUSIC_DIR=/music
+      # Music dir is configured in-app via Settings.
+      # In the app, navigate to /audio/Lossless/FLAC and select it.
     restart: unless-stopped
