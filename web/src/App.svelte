@@ -5,8 +5,9 @@
   import FolderNav from './lib/components/FolderNav.svelte';
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import Settings from './lib/components/Settings.svelte';
+  import QueueView from './lib/components/QueueView.svelte';
 
-  type View = 'loading' | 'choose-dir' | 'setup' | 'folders' | 'player' | 'settings';
+  type View = 'loading' | 'choose-dir' | 'setup' | 'folders' | 'player' | 'queue' | 'settings';
 
   let previousView = $state<View>('folders');
 
@@ -173,7 +174,10 @@
     {/if}
 
   {:else if view === 'player'}
-    <NowPlaying onBack={navigateToFolders} />
+    <NowPlaying onBack={navigateToFolders} onOpenQueue={() => view = 'queue'} />
+
+  {:else if view === 'queue'}
+    <QueueView onBack={() => view = 'player'} />
   {/if}
 </div>
 

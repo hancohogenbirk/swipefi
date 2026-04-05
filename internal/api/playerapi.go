@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"log/slog"
+
+	"swipefi/internal/store"
 	"net/http"
 )
 
@@ -89,5 +91,47 @@ func (a *API) PlayerReject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) PlayerState(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.player.GetState())
+}
+
+func (a *API) PlayerQueue(w http.ResponseWriter, r *http.Request) {
+	tracks, pos := a.player.GetQueue()
+	if tracks == nil {
+		tracks = []store.Track{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tracks":   tracks,
+		"position": pos,
+	})
+}
+
+func (a *API) PlayerReorder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	a.player.ReorderQueue(req.IDs)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (a *API) PlayerSkipTo(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TrackID int64 `json:"track_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := a.player.SkipToTrack(r.Context(), req.TrackID); err != nil {
+		slog.Error("skip to track", "err", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	writeJSON(w, http.StatusOK, a.player.GetState())
 }

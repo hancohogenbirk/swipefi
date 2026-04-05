@@ -320,6 +320,45 @@ func (p *Player) Reject(ctx context.Context) error {
 	return p.playCurrentLocked(ctx)
 }
 
+// GetQueue returns the current queue tracks and position.
+func (p *Player) GetQueue() ([]store.Track, int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.queue == nil {
+		return nil, 0
+	}
+	return p.queue.Tracks(), p.queue.Position()
+}
+
+// ReorderQueue sets a new track order by IDs.
+func (p *Player) ReorderQueue(ids []int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.queue == nil {
+		return
+	}
+	p.queue.Reorder(ids)
+	p.notify()
+}
+
+// SkipToTrack jumps to a specific track in the queue, removing all before it.
+func (p *Player) SkipToTrack(ctx context.Context, trackID int64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.queue == nil {
+		return fmt.Errorf("no queue")
+	}
+
+	p.checkPlayCountLocked(ctx, true)
+
+	if !p.queue.SkipTo(trackID) {
+		return fmt.Errorf("track not in queue")
+	}
+
+	return p.playCurrentLocked(ctx)
+}
+
 // checkPlayCountLocked increments play count if not already counted.
 // force=true always counts (user skipped/swiped). force=false only counts after 60s.
 func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {

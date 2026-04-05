@@ -5,7 +5,7 @@
   import ProgressBar from './ProgressBar.svelte';
   import TransportControls from './TransportControls.svelte';
 
-  let { onBack }: { onBack: () => void } = $props();
+  let { onBack, onOpenQueue }: { onBack: () => void; onOpenQueue: () => void } = $props();
 
   let state = $derived(getPlayerState());
   let track = $derived(state.track);
@@ -38,11 +38,14 @@
         <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
       </svg>
     </button>
-    <div class="queue-info">
+    <button class="queue-btn" onclick={onOpenQueue} aria-label="View queue" title="Queue">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+        <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+      </svg>
       {#if state.queue_length > 0}
-        {state.queue_position + 1} / {state.queue_length}
+        <span class="queue-count">{state.queue_position + 1}/{state.queue_length}</span>
       {/if}
-    </div>
+    </button>
   </header>
 
   <div class="card-area">
@@ -97,9 +100,26 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .queue-info {
-    font-size: 0.85rem;
+  .queue-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
     color: #888;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+  }
+
+  .queue-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  .queue-count {
+    font-variant-numeric: tabular-nums;
   }
 
   .card-area {

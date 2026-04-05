@@ -66,6 +66,9 @@ export const api = {
   seek: (position_ms: number) => request<PlayerState>('POST', '/api/player/seek', { position_ms }),
   reject: () => request<PlayerState>('POST', '/api/player/reject'),
   playerState: () => request<PlayerState>('GET', '/api/player/state'),
+  queue: () => request<{ tracks: Track[]; position: number }>('GET', '/api/player/queue'),
+  reorderQueue: (ids: number[]) => request<{ status: string }>('POST', '/api/player/queue/reorder', { ids }),
+  skipTo: (track_id: number) => request<PlayerState>('POST', '/api/player/queue/skip-to', { track_id }),
 
   // Config
   config: () => request<{ music_dir: string; delete_dir: string }>('GET', '/api/config'),

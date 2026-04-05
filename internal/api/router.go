@@ -56,6 +56,9 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		r.Post("/player/seek", api.PlayerSeek)
 		r.Post("/player/reject", api.PlayerReject)
 		r.Get("/player/state", api.PlayerState)
+		r.Get("/player/queue", api.PlayerQueue)
+		r.Post("/player/queue/reorder", api.PlayerReorder)
+		r.Post("/player/queue/skip-to", api.PlayerSkipTo)
 
 		// Devices
 		r.Get("/devices", api.ListDevices)
