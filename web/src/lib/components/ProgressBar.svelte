@@ -110,7 +110,7 @@
     position: absolute;
     left: 0;
     height: 4px;
-    background: #1db954;
+    background: linear-gradient(90deg, #1db954, #7cb3ff);
     border-radius: 2px;
     pointer-events: none;
   }

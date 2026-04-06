@@ -181,27 +181,30 @@
 
   .swipe-overlay {
     position: absolute;
-    top: 1.5rem;
-    padding: 0.5rem 1.5rem;
-    border-radius: 8px;
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
+    top: 1.25rem;
+    padding: 0.6rem 1.75rem;
+    border-radius: 12px;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
     z-index: 10;
     pointer-events: none;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   }
 
   .swipe-overlay.keep {
-    right: 1rem;
+    right: 0.75rem;
     color: #1db954;
-    border: 3px solid #1db954;
+    border: 4px solid #1db954;
+    background: rgba(29, 185, 84, 0.1);
     transform: rotate(12deg);
   }
 
   .swipe-overlay.reject {
-    left: 1rem;
+    left: 0.75rem;
     color: #ff4444;
-    border: 3px solid #ff4444;
+    border: 4px solid #ff4444;
+    background: rgba(255, 68, 68, 0.1);
     transform: rotate(-12deg);
   }
 
@@ -280,9 +283,18 @@
   }
 
   .hint {
-    font-size: 0.7rem;
-    color: #444;
+    font-size: 0.8rem;
+    color: #555;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .hint-left {
+    color: #ff6b6b;
+  }
+
+  .hint-right {
+    color: #1db954;
   }
 </style>

@@ -15,6 +15,7 @@
     class:active={activeTab === 'folders'}
     onclick={() => onTabChange('folders')}
     aria-label="Folders"
+    style="--tab-color: #1db954"
   >
     <FolderOpen size={22} />
     <span class="nav-label">Folders</span>
@@ -25,6 +26,7 @@
     class:active={activeTab === 'player'}
     onclick={() => onTabChange('player')}
     aria-label="Now Playing"
+    style="--tab-color: #4ec484"
   >
     <Disc3 size={22} />
     <span class="nav-label">Now Playing</span>
@@ -35,6 +37,7 @@
     class:active={activeTab === 'settings'}
     onclick={() => onTabChange('settings')}
     aria-label="Settings"
+    style="--tab-color: #7cb3ff"
   >
     <Settings size={22} />
     <span class="nav-label">Settings</span>
@@ -59,7 +62,7 @@
     gap: 0.15rem;
     background: none;
     border: none;
-    color: #888;
+    color: #555;
     cursor: pointer;
     padding: 0.25rem 1rem;
     border-radius: 8px;
@@ -68,11 +71,11 @@
   }
 
   .nav-tab.active {
-    color: #1db954;
+    color: var(--tab-color);
   }
 
   .nav-tab:hover:not(.active) {
-    color: #aaa;
+    color: #888;
   }
 
   .nav-label {

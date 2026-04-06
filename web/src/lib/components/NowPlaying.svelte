@@ -128,15 +128,15 @@
     align-items: center;
     justify-content: center;
     min-height: 0;
-    padding: 0.5rem;
+    padding: 0.25rem 0.5rem;
     overflow: hidden;
   }
 
   .controls-area {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding-bottom: 1rem;
+    gap: 0.25rem;
+    padding-bottom: 0.25rem;
   }
 
   .idle-message {
