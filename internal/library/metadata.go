@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/dhowden/tag"
 )
@@ -81,17 +80,41 @@ func ReadMetadata(fullPath, relPath string) (*TrackMeta, error) {
 		meta.Album = m.Album()
 	}
 
-	// Fall back to filename if no title tag
+	// Fall back to path structure for missing metadata
+	// e.g. "Artist/Album/01 - Title.flac" → derive artist, album, title
+	parts := strings.Split(filepath.ToSlash(filepath.Dir(relPath)), "/")
+
 	if meta.Title == "" {
 		base := filepath.Base(relPath)
-		meta.Title = strings.TrimSuffix(base, filepath.Ext(base))
+		meta.Title = cleanTrackTitle(strings.TrimSuffix(base, filepath.Ext(base)))
 	}
 
-	// dhowden/tag doesn't provide duration; we'd need a format-specific parser.
-	// For now, duration stays 0 and can be populated later or from the renderer.
-	_ = time.Now()
+	if meta.Album == "" && len(parts) >= 1 && parts[len(parts)-1] != "." {
+		meta.Album = parts[len(parts)-1]
+	}
+
+	if meta.Artist == "" && len(parts) >= 2 {
+		meta.Artist = parts[len(parts)-2]
+	}
 
 	return meta, nil
+}
+
+// cleanTrackTitle strips common prefixes like "01 - ", "01. ", "1-" from filenames.
+func cleanTrackTitle(name string) string {
+	// Strip leading track numbers: "01 - Title", "01. Title", "1-Title", "01 Title"
+	i := 0
+	for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+		i++
+	}
+	if i > 0 && i < len(name) {
+		rest := name[i:]
+		rest = strings.TrimLeft(rest, " .-_")
+		if rest != "" {
+			return rest
+		}
+	}
+	return name
 }
 
 // ExtractArt reads embedded album art from an audio file.
