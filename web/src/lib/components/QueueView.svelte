@@ -178,7 +178,6 @@
   {:else}
     <div class="queue-list" data-testid="queue-list">
       {#each tracks as track, idx (track.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="queue-item"
           class:current={track.id === currentTrackId}
@@ -186,7 +185,10 @@
           class:drag-over={isDragging && dragIndex !== idx && dragOverIndex === idx}
           data-testid="queue-item"
           data-track-id={track.id}
+          role="button"
+          tabindex="0"
           onclick={() => skipTo(track.id)}
+          onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
           ontouchstart={(e) => handleTouchStart(e, idx)}
           ontouchmove={handleTouchMove}
           ontouchend={handleTouchEnd}

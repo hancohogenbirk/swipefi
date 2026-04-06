@@ -285,8 +285,8 @@
     <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; showQueue = false; showDeletedManager = false; }} />
 
     {#if showExitConfirm}
-      <div class="exit-overlay" onclick={() => showExitConfirm = false}>
-        <div class="exit-dialog" onclick={(e) => e.stopPropagation()}>
+      <div class="exit-overlay" role="button" tabindex="-1" onclick={() => showExitConfirm = false} onkeydown={(e) => { if (e.key === 'Escape') showExitConfirm = false; }}>
+        <div class="exit-dialog" role="presentation" onclick={(e) => e.stopPropagation()}>
           <p>Leave SwipeFi?</p>
           <div class="exit-actions">
             <button class="exit-cancel" onclick={() => showExitConfirm = false}>Cancel</button>

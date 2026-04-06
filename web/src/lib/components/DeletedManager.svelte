@@ -143,8 +143,8 @@
   {/if}
 
   {#if showPurgeConfirm}
-    <div class="confirm-overlay" onclick={() => showPurgeConfirm = false}>
-      <div class="confirm-dialog" onclick={(e) => e.stopPropagation()}>
+    <div class="confirm-overlay" role="button" tabindex="-1" onclick={() => showPurgeConfirm = false} onkeydown={(e) => { if (e.key === 'Escape') showPurgeConfirm = false; }}>
+      <div class="confirm-dialog" role="presentation" onclick={(e) => e.stopPropagation()}>
         <p>Permanently delete {selected.size} file{selected.size !== 1 ? 's' : ''}?</p>
         <p class="confirm-warning">This cannot be undone.</p>
         <div class="confirm-actions">
