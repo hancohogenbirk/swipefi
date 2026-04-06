@@ -240,22 +240,22 @@
 
   {:else}
     <!-- Main app with tabs -->
+    {#if scanProgress.scanning}
+      <div class="scan-banner">
+        <div class="scan-bar">
+          <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
+        </div>
+        <span class="scan-banner-text">
+          {#if scanProgress.total > 0}
+            Scanning: {scanProgress.scanned} / {scanProgress.total}
+          {:else}
+            Scanning library...
+          {/if}
+        </span>
+      </div>
+    {/if}
     <div class="tab-content">
       <div class="tab-panel" class:hidden={activeTab !== 'folders'}>
-        {#if scanProgress.scanning}
-          <div class="scan-banner">
-            <div class="scan-bar">
-              <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
-            </div>
-            <span class="scan-banner-text">
-              {#if scanProgress.total > 0}
-                Scanning: {scanProgress.scanned} / {scanProgress.total}
-              {:else}
-                Scanning library...
-              {/if}
-            </span>
-          </div>
-        {/if}
         <FolderNav
           onNavigateToPlayer={() => activeTab = 'player'}
           onFolderNavigate={pushFolderHistory}

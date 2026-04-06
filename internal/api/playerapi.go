@@ -84,6 +84,12 @@ func (a *API) PlayerSeek(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) PlayerReject(w http.ResponseWriter, r *http.Request) {
+	// Block during scanning
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "library scan in progress, please wait")
+		return
+	}
+
 	// Get the track path before rejecting (for partial rescan)
 	state := a.player.GetState()
 	var trackFolder string

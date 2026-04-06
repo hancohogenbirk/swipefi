@@ -7,6 +7,7 @@
   let tracks = $state<Track[]>([]);
   let selected = $state<Set<number>>(new Set());
   let loading = $state(true);
+  let busy = $state(false);
   let error = $state('');
   let showPurgeConfirm = $state(false);
 
@@ -44,8 +45,9 @@
   }
 
   async function restoreSelected() {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || busy) return;
     error = '';
+    busy = true;
     try {
       const result = await api.restoreDeleted([...selected]);
       if (result.errors?.length) {
@@ -54,18 +56,23 @@
       await loadDeleted();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Restore failed';
+    } finally {
+      busy = false;
     }
   }
 
   async function purgeSelected() {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || busy) return;
     error = '';
+    busy = true;
     try {
       await api.purgeDeleted([...selected]);
       showPurgeConfirm = false;
       await loadDeleted();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Delete failed';
+    } finally {
+      busy = false;
     }
   }
 
@@ -101,11 +108,11 @@
       </button>
 
       {#if selected.size > 0}
-        <button class="restore-btn" onclick={restoreSelected}>
+        <button class="restore-btn" onclick={restoreSelected} disabled={busy}>
           <RotateCcw size={16} />
-          <span>Restore ({selected.size})</span>
+          <span>{busy ? 'Restoring...' : `Restore (${selected.size})`}</span>
         </button>
-        <button class="purge-btn" onclick={() => showPurgeConfirm = true}>
+        <button class="purge-btn" onclick={() => showPurgeConfirm = true} disabled={busy}>
           <Trash2 size={16} />
           <span>Delete ({selected.size})</span>
         </button>
@@ -238,6 +245,11 @@
     padding: 0.4rem 0.8rem;
     border-radius: 16px;
     font-weight: 600;
+  }
+
+  .restore-btn:disabled, .purge-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .track-list {

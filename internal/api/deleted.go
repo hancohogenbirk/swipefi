@@ -26,6 +26,11 @@ func (a *API) ListDeleted(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "library scan in progress, please wait")
+		return
+	}
+
 	var req struct {
 		IDs []int64 `json:"ids"`
 	}
@@ -102,6 +107,11 @@ func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) PurgeDeleted(w http.ResponseWriter, r *http.Request) {
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "library scan in progress, please wait")
+		return
+	}
+
 	var req struct {
 		IDs []int64 `json:"ids"`
 		All bool    `json:"all"`

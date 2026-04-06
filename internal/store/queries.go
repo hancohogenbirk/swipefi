@@ -99,8 +99,12 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 
 	var args []any
 	if folder != "" {
-		query += " AND path LIKE ?"
-		args = append(args, folder+"/%")
+		// Only match direct children: path starts with folder/ but has no further /
+		query += " AND path LIKE ? AND path NOT LIKE ?"
+		args = append(args, folder+"/%", folder+"/%/%")
+	} else {
+		// Root: only files with no / in path (direct children of music dir)
+		query += " AND path NOT LIKE '%/%'"
 	}
 
 	sortCol := "added_at"
