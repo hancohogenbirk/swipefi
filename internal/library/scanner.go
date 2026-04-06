@@ -77,33 +77,15 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	sc.initialScan = trackCount == 0
 	sc.mu.Unlock()
 
-	// Quick count of audio files for progress estimation
-	total := 0
-	filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
-				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if IsAudioFile(d.Name()) {
-			total++
-		}
-		return nil
-	})
-
+	// Single walk: discover files and read metadata in one pass
+	// Use DB track count as initial estimate for progress bar
 	sc.mu.Lock()
-	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total}
+	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: trackCount}
 	sc.mu.Unlock()
-	slog.Info("scan: counted files", "total", total)
 
 	existingPaths := make(map[string]bool)
 	var count int
+	var discovered int
 
 	err := filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -117,7 +99,6 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 
 		if d.IsDir() {
 			name := d.Name()
-			// Skip Synology system dirs, recycle bins, hidden dirs, and to_delete
 			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
 				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
 				return filepath.SkipDir
@@ -127,6 +108,13 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 
 		if !IsAudioFile(d.Name()) {
 			return nil
+		}
+
+		discovered++
+		if discovered%50 == 0 {
+			sc.mu.Lock()
+			sc.status.Total = discovered
+			sc.mu.Unlock()
 		}
 
 		relPath, err := filepath.Rel(musicDir, path)
@@ -160,9 +148,11 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		count++
 		sc.mu.Lock()
 		sc.status.Scanned = count
+		sc.status.Total = discovered
 		sc.mu.Unlock()
+
 		if count%100 == 0 {
-			slog.Info("scan progress", "tracks", count, "total", total)
+			slog.Info("scan progress", "tracks", count, "total", discovered)
 		}
 
 		return nil
