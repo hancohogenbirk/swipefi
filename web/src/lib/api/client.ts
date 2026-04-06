@@ -86,6 +86,7 @@ export const api = {
   // Devices
   devices: () => request<Device[]>('GET', '/api/devices'),
   selectDevice: (udn: string) => request<{ status: string; device: string }>('POST', '/api/devices/select', { udn }),
+  disconnectDevice: () => request<{ status: string }>('POST', '/api/devices/disconnect'),
   scanDevices: () => request<Device[]>('POST', '/api/devices/scan'),
 
   // Deleted tracks

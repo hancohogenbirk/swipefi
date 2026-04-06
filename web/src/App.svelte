@@ -280,7 +280,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} />
         {:else}
-          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} />
+          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} />
         {/if}
       </div>
     </div>

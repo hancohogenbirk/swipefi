@@ -41,6 +41,12 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *API) DisconnectDevice(w http.ResponseWriter, r *http.Request) {
+	a.player.Disconnect(r.Context())
+	slog.Info("device disconnected")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (a *API) RescanDevices(w http.ResponseWriter, r *http.Request) {
 	if err := a.discovery.Scan(r.Context()); err != nil {
 		slog.Error("rescan devices", "err", err)

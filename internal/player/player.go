@@ -106,6 +106,22 @@ func (p *Player) SetTransport(t *dlna.Transport) {
 	p.transport = t
 }
 
+// Disconnect stops playback and clears the transport.
+func (p *Player) Disconnect(ctx context.Context) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.transport != nil && p.state == StatePlaying {
+		p.transport.Stop(ctx)
+	}
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.transport = nil
+	p.queue = nil
+	p.currentStreamURL = ""
+	p.notify()
+}
+
 func (p *Player) GetState() PlayerState {
 	p.mu.Lock()
 	defer p.mu.Unlock()

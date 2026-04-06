@@ -1,8 +1,9 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { X, Folder, ArrowUp, Zap, Trash2 } from 'lucide-svelte';
+  import { X, Folder, ArrowUp, Zap, Trash2, Speaker, Unplug } from 'lucide-svelte';
+  import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted }: { onDone: () => void; onOpenDeleted?: () => void } = $props();
+  let { onDone, onOpenDeleted, onDisconnect }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void } = $props();
 
   let currentPath = $state('/');
   let parentPath = $state('/');
@@ -61,10 +62,33 @@
     }
   }
 
+  let connectedDevice = $state('');
+
+  async function loadDeviceInfo() {
+    try {
+      const devices = await api.devices();
+      if (devices?.length > 0) {
+        connectedDevice = devices[0].name;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function disconnect() {
+    try {
+      await api.disconnectDevice();
+      onDisconnect?.();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Disconnect failed';
+    }
+  }
+
   // Start browsing from root and load shortcuts
   browse('/');
   loadShortcuts();
   loadDeletedCount();
+  loadDeviceInfo();
 </script>
 
 <div class="settings">
@@ -132,6 +156,20 @@
         <span class="deleted-count">{deletedCount}</span>
       {/if}
     </button>
+  {/if}
+
+  {#if onDisconnect && connectedDevice}
+    <div class="section-divider"></div>
+    <div class="device-section">
+      <div class="device-info">
+        <Speaker size={20} />
+        <span>{connectedDevice}</span>
+      </div>
+      <button class="disconnect-btn" onclick={disconnect}>
+        <Unplug size={16} />
+        <span>Disconnect</span>
+      </button>
+    </div>
   {/if}
 </div>
 
@@ -308,5 +346,41 @@
     border-radius: 10px;
     min-width: 1.5rem;
     text-align: center;
+  }
+
+  .device-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+  }
+
+  .device-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #f0f0f0;
+    font-size: 0.95rem;
+  }
+
+  .disconnect-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: #333;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 16px;
+    font-weight: 600;
+  }
+
+  .disconnect-btn:hover {
+    background: #444;
   }
 </style>

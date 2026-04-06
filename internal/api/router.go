@@ -65,6 +65,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		// Devices
 		r.Get("/devices", api.ListDevices)
 		r.Post("/devices/select", api.SelectDevice)
+		r.Post("/devices/disconnect", api.DisconnectDevice)
 		r.Post("/devices/scan", api.RescanDevices)
 
 		// Config
