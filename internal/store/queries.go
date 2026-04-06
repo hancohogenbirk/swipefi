@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -43,8 +45,10 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	return nil
 }
 
-// MarkMissingAsDeleted marks tracks as deleted if their path is not in the provided set.
-func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool) (int, error) {
+// MarkMissingAsDeleted marks tracks as deleted if their file no longer exists on disk.
+// Uses existingPaths from the walk as a fast check, then does an os.Stat for any
+// candidate not in the map (handles transient walk errors over network filesystems).
+func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
 	if err != nil {
 		return 0, fmt.Errorf("query tracks: %w", err)
@@ -58,9 +62,15 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 		if err := rows.Scan(&id, &path); err != nil {
 			return 0, fmt.Errorf("scan: %w", err)
 		}
-		if !existingPaths[path] {
-			toDelete = append(toDelete, id)
+		if existingPaths[path] {
+			continue
 		}
+		// Walk didn't find it — double-check with stat before marking deleted
+		fullPath := filepath.Join(musicDir, filepath.FromSlash(path))
+		if _, err := os.Stat(fullPath); err == nil {
+			continue // file exists, walk just missed it
+		}
+		toDelete = append(toDelete, id)
 	}
 	if err := rows.Err(); err != nil {
 		return 0, err

@@ -188,7 +188,7 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	}
 
 	// Mark tracks whose files no longer exist on disk
-	orphaned, err := sc.store.MarkMissingAsDeleted(scanCtx, existingPaths)
+	orphaned, err := sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
 	if err != nil {
 		slog.Warn("cleanup orphaned tracks failed", "err", err)
 	} else if orphaned > 0 {
