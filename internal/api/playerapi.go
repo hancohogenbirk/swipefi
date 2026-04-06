@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"path/filepath"
 
 	"swipefi/internal/store"
-	"net/http"
 )
 
 func (a *API) PlayerPlay(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +84,28 @@ func (a *API) PlayerSeek(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) PlayerReject(w http.ResponseWriter, r *http.Request) {
+	// Get the track path before rejecting (for partial rescan)
+	state := a.player.GetState()
+	var trackFolder string
+	if state.Track != nil {
+		trackFolder = filepath.Dir(state.Track.Path)
+	}
+
 	if err := a.player.Reject(r.Context()); err != nil {
 		slog.Error("reject", "err", err)
 		writeError(w, http.StatusInternalServerError, "reject failed")
 		return
 	}
+
+	// Trigger partial rescan of the affected folder in background
+	if trackFolder != "" {
+		go func() {
+			if _, err := a.scanner.ScanFolder(context.Background(), trackFolder); err != nil {
+				slog.Warn("partial rescan after reject failed", "folder", trackFolder, "err", err)
+			}
+		}()
+	}
+
 	writeJSON(w, http.StatusOK, a.player.GetState())
 }
 
