@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"swipefi/internal/store"
 )
@@ -18,9 +19,12 @@ type ScanStatus struct {
 }
 
 type Scanner struct {
-	musicDir string
-	store    *store.Store
-	status   ScanStatus
+	mu          sync.Mutex
+	musicDir    string
+	store       *store.Store
+	status      ScanStatus
+	scanCancel  context.CancelFunc
+	initialScan bool
 }
 
 func NewScanner(musicDir string, s *store.Store) *Scanner {
@@ -28,23 +32,54 @@ func NewScanner(musicDir string, s *store.Store) *Scanner {
 }
 
 func (sc *Scanner) SetMusicDir(dir string) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if sc.scanCancel != nil {
+		sc.scanCancel()
+	}
 	sc.musicDir = dir
 }
 
 func (sc *Scanner) MusicDir() string {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 	return sc.musicDir
 }
 
 func (sc *Scanner) GetStatus() ScanStatus {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 	return sc.status
 }
 
+func (sc *Scanner) IsInitialScan() bool {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	return sc.status.Scanning && sc.initialScan
+}
+
 func (sc *Scanner) Scan(ctx context.Context) (int, error) {
-	slog.Info("starting library scan", "dir", sc.musicDir)
+	sc.mu.Lock()
+	if sc.scanCancel != nil {
+		sc.scanCancel()
+	}
+	scanCtx, cancel := context.WithCancel(ctx)
+	sc.scanCancel = cancel
+	musicDir := sc.musicDir
+	sc.mu.Unlock()
+	defer cancel()
+
+	slog.Info("starting library scan", "dir", musicDir)
+
+	// Check if this is an initial scan (DB empty)
+	trackCount, _ := sc.store.TrackCount(scanCtx)
+	sc.mu.Lock()
+	sc.initialScan = trackCount == 0
+	sc.mu.Unlock()
 
 	// Quick count of audio files for progress estimation
 	total := 0
-	filepath.WalkDir(sc.musicDir, func(path string, d fs.DirEntry, err error) error {
+	filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -62,20 +97,22 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		return nil
 	})
 
+	sc.mu.Lock()
 	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total}
+	sc.mu.Unlock()
 	slog.Info("scan: counted files", "total", total)
 
 	existingPaths := make(map[string]bool)
 	var count int
 
-	err := filepath.WalkDir(sc.musicDir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			slog.Warn("walk error", "path", path, "err", err)
 			return nil
 		}
 
-		if ctx.Err() != nil {
-			return ctx.Err()
+		if scanCtx.Err() != nil {
+			return scanCtx.Err()
 		}
 
 		if d.IsDir() {
@@ -92,7 +129,7 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(sc.musicDir, path)
+		relPath, err := filepath.Rel(musicDir, path)
 		if err != nil {
 			return nil
 		}
@@ -115,13 +152,15 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 			AddedAt:    meta.AddedAt,
 		}
 
-		if err := sc.store.UpsertTrack(ctx, track); err != nil {
+		if err := sc.store.UpsertTrack(scanCtx, track); err != nil {
 			slog.Warn("upsert error", "path", relPath, "err", err)
 			return nil
 		}
 
 		count++
+		sc.mu.Lock()
 		sc.status.Scanned = count
+		sc.mu.Unlock()
 		if count%100 == 0 {
 			slog.Info("scan progress", "tracks", count, "total", total)
 		}
@@ -129,15 +168,18 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		return nil
 	})
 
+	sc.mu.Lock()
 	sc.status.Scanning = false
 	sc.status.Scanned = count
+	sc.initialScan = false
+	sc.mu.Unlock()
 
 	if err != nil {
 		return count, err
 	}
 
 	// Mark tracks whose files no longer exist on disk
-	orphaned, err := sc.store.MarkMissingAsDeleted(ctx, existingPaths)
+	orphaned, err := sc.store.MarkMissingAsDeleted(scanCtx, existingPaths)
 	if err != nil {
 		slog.Warn("cleanup orphaned tracks failed", "err", err)
 	} else if orphaned > 0 {
@@ -149,9 +191,13 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 }
 
 func (sc *Scanner) ListFolders(path string) ([]FolderEntry, error) {
-	dir := sc.musicDir
+	sc.mu.Lock()
+	musicDir := sc.musicDir
+	sc.mu.Unlock()
+
+	dir := musicDir
 	if path != "" {
-		dir = filepath.Join(sc.musicDir, filepath.FromSlash(path))
+		dir = filepath.Join(musicDir, filepath.FromSlash(path))
 	}
 
 	// Prevent directory traversal
@@ -159,7 +205,7 @@ func (sc *Scanner) ListFolders(path string) ([]FolderEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	absMusic, err := filepath.Abs(sc.musicDir)
+	absMusic, err := filepath.Abs(musicDir)
 	if err != nil {
 		return nil, err
 	}
