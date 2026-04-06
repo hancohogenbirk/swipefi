@@ -89,11 +89,13 @@
 <div class="folder-nav">
   <header class="nav-header">
     <div class="breadcrumbs">
-      <button class="crumb" onclick={() => loadFolders('')}>Music</button>
-      {#each pathParts as part, i}
-        <span class="separator">/</span>
-        <button class="crumb" onclick={() => navigateToBreadcrumb(i)}>{part}</button>
-      {/each}
+      {#if currentPath}
+        <button class="crumb" onclick={() => loadFolders('')}>...</button>
+        {#each pathParts as part, i}
+          <span class="separator">/</span>
+          <button class="crumb" onclick={() => navigateToBreadcrumb(i)}>{part}</button>
+        {/each}
+      {/if}
     </div>
     <div class="header-actions">
       <select class="sort-select" onchange={handleSortChange} value={`${getSort()}:${getOrder()}`}>

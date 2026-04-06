@@ -64,10 +64,10 @@
   async function purgeSelected() {
     if (selected.size === 0 || busy) return;
     error = '';
+    showPurgeConfirm = false;
     busy = true;
     try {
       await api.purgeDeleted([...selected]);
-      showPurgeConfirm = false;
       await loadDeleted();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Delete failed';

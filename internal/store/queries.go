@@ -226,6 +226,12 @@ func (s *Store) HasTracksInFolder(folder string) bool {
 	return err == nil && count > 0
 }
 
+// ClearAllTracks removes all tracks from the database (used when music dir changes).
+func (s *Store) ClearAllTracks(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM tracks")
+	return err
+}
+
 func (s *Store) TrackCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0").Scan(&count)

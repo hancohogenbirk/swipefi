@@ -257,7 +257,7 @@
         </span>
       </div>
     {/if}
-    <div class="tab-content">
+    <div class="tab-content" class:scanning={scanProgress.scanning}>
       <div class="tab-panel" class:hidden={activeTab !== 'folders'}>
         <FolderNav
           onNavigateToPlayer={() => activeTab = 'player'}
@@ -278,7 +278,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} />
         {:else}
-          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} />
+          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} />
         {/if}
       </div>
     </div>
@@ -433,6 +433,11 @@
     flex: 1;
     min-height: 0;
     position: relative;
+  }
+
+  .tab-content.scanning {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   .tab-panel {

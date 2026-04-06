@@ -92,6 +92,10 @@ func run() error {
 	// Handle music dir changes from the settings UI
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
 		slog.Info("music directory changed", "path", newMusicDir)
+		// Clear old tracks from DB before scanning new dir
+		if err := s.ClearAllTracks(ctx); err != nil {
+			slog.Error("clear tracks on dir change", "err", err)
+		}
 		scanner.SetMusicDir(newMusicDir)
 		p.SetDirs(newMusicDir, newDeleteDir)
 		os.MkdirAll(newDeleteDir, 0755)

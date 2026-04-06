@@ -3,7 +3,15 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, visible = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; visible?: boolean } = $props();
+
+  // Refresh counts when tab becomes visible
+  $effect(() => {
+    if (visible) {
+      loadDeletedCount();
+      loadDeviceInfo();
+    }
+  });
 
   // Music dir browser state
   let musicDir = $state('');

@@ -147,22 +147,17 @@
     <p class="album">{track.album || 'Unknown Album'}</p>
     <p class="play-count">Played {track.play_count} time{track.play_count !== 1 ? 's' : ''}</p>
   </div>
-
-  <div class="swipe-hints">
-    <span class="hint hint-left">← Delete</span>
-    <span class="hint hint-right">Keep →</span>
-  </div>
 </div>
 
 <style>
   .swipe-card {
     background: linear-gradient(145deg, #1e1e1e, #2a2a2a);
     border-radius: 20px;
-    padding: 1.5rem 1.5rem;
+    padding: 1.25rem 1.25rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
     user-select: none;
     touch-action: pan-y;
     position: relative;
@@ -275,26 +270,4 @@
     margin: 0.5rem 0 0;
   }
 
-  .swipe-hints {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    padding: 0 0.5rem;
-  }
-
-  .hint {
-    font-size: 0.8rem;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-  }
-
-  .hint-left {
-    color: #ff6b6b;
-  }
-
-  .hint-right {
-    color: #1db954;
-  }
 </style>

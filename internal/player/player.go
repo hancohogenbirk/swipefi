@@ -112,7 +112,7 @@ func (p *Player) Disconnect(ctx context.Context) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.transport != nil && p.state == StatePlaying {
+	if p.transport != nil && p.state != StateIdle {
 		p.transport.Stop(ctx)
 	}
 	p.stopPollingLocked()
