@@ -26,6 +26,12 @@ func (a *API) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) ListFolders(w http.ResponseWriter, r *http.Request) {
+	// During initial scan (DB was empty), return empty to avoid showing partial results
+	if a.scanner.IsInitialScan() {
+		writeJSON(w, http.StatusOK, []library.FolderEntry{})
+		return
+	}
+
 	path := r.URL.Query().Get("path")
 
 	folders, err := a.scanner.ListFolders(path)
