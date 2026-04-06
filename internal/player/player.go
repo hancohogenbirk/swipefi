@@ -318,6 +318,7 @@ func (p *Player) Reject(ctx context.Context) error {
 			p.transport.Stop(ctx)
 		}
 		p.state = StateIdle
+		p.currentStreamURL = ""
 		p.stopPollingLocked()
 		p.notify()
 		return nil
@@ -457,6 +458,16 @@ func (p *Player) pollOnce(ctx context.Context) {
 	p.positionMs = pos.RelTime.Milliseconds()
 	p.durationMs = pos.TrackDuration.Milliseconds()
 
+	// Check if another source took over the device
+	if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
+		slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
+		p.state = StateIdle
+		p.currentStreamURL = ""
+		p.stopPollingLocked()
+		p.notify()
+		return
+	}
+
 	// Check if track ended naturally
 	if tState == dlna.StateStopped && p.state == StatePlaying {
 		slog.Info("track ended naturally")
@@ -464,6 +475,7 @@ func (p *Player) pollOnce(ctx context.Context) {
 
 		if p.queue.Next() == nil {
 			p.state = StateIdle
+			p.currentStreamURL = ""
 			p.stopPollingLocked()
 			p.notify()
 			return
