@@ -183,6 +183,7 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.playStartTime = time.Now()
 	p.accumulatedMs = 0
 	p.playCounted = false
+	slog.Debug("playCurrentLocked: reset playCounted", "track_id", track.ID, "title", track.Title)
 
 	p.startPollingLocked(ctx)
 	p.notify()
@@ -234,6 +235,9 @@ func (p *Player) Next(ctx context.Context) error {
 		return nil
 	}
 
+	if cur := p.queue.Current(); cur != nil {
+		slog.Debug("Next called", "current_track", cur.Title, "playCounted", p.playCounted)
+	}
 	p.checkPlayCountLocked(ctx, true) // user explicitly skipped → always count
 
 	if p.queue.Next() == nil {
@@ -357,6 +361,7 @@ func (p *Player) SkipToTrack(ctx context.Context, trackID int64) error {
 		return fmt.Errorf("no queue")
 	}
 
+	slog.Debug("SkipToTrack called", "target_id", trackID, "playCounted", p.playCounted)
 	p.checkPlayCountLocked(ctx, true)
 
 	if !p.queue.SkipTo(trackID) {
@@ -369,6 +374,7 @@ func (p *Player) SkipToTrack(ctx context.Context, trackID int64) error {
 // checkPlayCountLocked increments play count if not already counted.
 // force=true always counts (user skipped/swiped). force=false only counts after 60s.
 func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
+	slog.Debug("checkPlayCountLocked", "playCounted", p.playCounted, "force", force)
 	if p.playCounted {
 		return
 	}
