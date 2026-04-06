@@ -135,3 +135,11 @@ func cacheArt(cacheDir string, trackID int64, data []byte, mimeType string) erro
 	path := filepath.Join(cacheDir, fmt.Sprintf("%d%s", trackID, ext))
 	return os.WriteFile(path, data, 0644)
 }
+
+// DeleteCachedArt removes all cached art files for the given track ID.
+func DeleteCachedArt(cacheDir string, trackID int64) {
+	for _, ext := range []string{".jpg", ".png", ".noart"} {
+		path := filepath.Join(cacheDir, fmt.Sprintf("%d%s", trackID, ext))
+		os.Remove(path)
+	}
+}
