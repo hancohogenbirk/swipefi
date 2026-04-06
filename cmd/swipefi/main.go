@@ -52,11 +52,8 @@ func run() error {
 	if musicDir == "" {
 		musicDir, _ = s.GetConfig("music_dir")
 	}
-	deleteDir := os.Getenv("SWIPEFI_DELETE_DIR")
-	if deleteDir == "" {
-		deleteDir, _ = s.GetConfig("delete_dir")
-	}
-	if musicDir != "" && deleteDir == "" {
+	var deleteDir string
+	if musicDir != "" {
 		deleteDir = filepath.Join(musicDir, "to_delete")
 	}
 

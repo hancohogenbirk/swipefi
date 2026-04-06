@@ -134,9 +134,11 @@ func (a *API) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
-	// Return the active music dir (scanner knows the truth)
 	musicDir := a.scanner.MusicDir()
-	deleteDir, _ := a.store.GetConfig("delete_dir")
+	var deleteDir string
+	if musicDir != "" {
+		deleteDir = filepath.Join(musicDir, "to_delete")
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"music_dir":  musicDir,
@@ -167,8 +169,6 @@ func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleteDir := filepath.Join(req.Path, "to_delete")
-	a.store.SetConfig("delete_dir", deleteDir)
-
 	slog.Info("music directory set", "path", req.Path, "delete_dir", deleteDir)
 
 	// Notify the app to reconfigure (via callback)
