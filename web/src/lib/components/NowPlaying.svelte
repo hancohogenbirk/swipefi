@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { ArrowLeft, ListMusic } from 'lucide-svelte';
   import SwipeCard from './SwipeCard.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import TransportControls from './TransportControls.svelte';
@@ -37,14 +38,10 @@
 <div class="now-playing">
   <header class="np-header">
     <button class="back-btn" onclick={onBack} aria-label="Back to folders">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-      </svg>
+      <ArrowLeft size={24} />
     </button>
     <button class="queue-btn" onclick={onOpenQueue} aria-label="View queue" title="Queue">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-        <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
-      </svg>
+      <ListMusic size={22} />
       {#if ps.queue_length > 0}
         <span class="queue-count">{ps.queue_position + 1}/{ps.queue_length}</span>
       {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
+  import { X, Folder, ArrowUp, Zap } from 'lucide-svelte';
 
   let { onDone }: { onDone: () => void } = $props();
 
@@ -58,7 +59,7 @@
   <header class="settings-header">
     <div class="settings-title-row">
       <h2>Choose Music Directory</h2>
-      <button class="close-btn" onclick={onDone} aria-label="Close settings">✕</button>
+      <button class="close-btn" onclick={onDone} aria-label="Close settings"><X size={20} /></button>
     </div>
     <p class="current-path">{currentPath}</p>
   </header>
@@ -72,7 +73,7 @@
       <p class="section-label">Quick access</p>
       {#each shortcuts as sc}
         <button class="dir-item shortcut" onclick={() => browse(sc.path)}>
-          <span class="dir-icon">⚡</span>
+          <span class="dir-icon"><Zap size={20} /></span>
           <span class="dir-name">{sc.name}</span>
         </button>
       {/each}
@@ -83,7 +84,7 @@
   <div class="dir-list">
     {#if currentPath !== '/'}
       <button class="dir-item" onclick={() => browse(parentPath)}>
-        <span class="dir-icon">⬆</span>
+        <span class="dir-icon"><ArrowUp size={20} /></span>
         <span class="dir-name">..</span>
       </button>
     {/if}
@@ -93,7 +94,7 @@
     {:else}
       {#each entries as entry}
         <button class="dir-item" onclick={() => browse(entry.path)}>
-          <span class="dir-icon">📁</span>
+          <span class="dir-icon"><Folder size={20} /></span>
           <span class="dir-name">{entry.name}</span>
         </button>
       {/each}

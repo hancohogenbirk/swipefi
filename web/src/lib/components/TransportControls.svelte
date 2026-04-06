@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { SkipBack, RotateCcw, Play, Pause, RotateCw, SkipForward } from 'lucide-svelte';
 
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing');
@@ -52,41 +53,29 @@
 
 <div class="transport">
   <button class="transport-btn" onclick={prev} aria-label="Previous">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
-      <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-    </svg>
+    <SkipBack size={28} />
   </button>
 
   <button class="transport-btn skip-btn" onclick={skipBack15} aria-label="Back 15 seconds">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36">
-      <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-    </svg>
+    <RotateCcw size={32} />
     <span class="skip-label">15</span>
   </button>
 
   <button class="play-pause-btn" onclick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
     {#if isPlaying}
-      <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
-        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-      </svg>
+      <Pause size={36} fill="currentColor" />
     {:else}
-      <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
-        <path d="M8 5v14l11-7z"/>
-      </svg>
+      <Play size={36} fill="currentColor" />
     {/if}
   </button>
 
   <button class="transport-btn skip-btn" onclick={skipForward15} aria-label="Forward 15 seconds">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36" style="transform: scaleX(-1);">
-      <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-    </svg>
+    <RotateCw size={32} />
     <span class="skip-label">15</span>
   </button>
 
   <button class="transport-btn" onclick={next} aria-label="Next">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
-      <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
-    </svg>
+    <SkipForward size={28} />
   </button>
 </div>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { ArrowLeft, ChevronUp, ChevronDown, Play } from 'lucide-svelte';
 
   let { onBack }: { onBack: () => void } = $props();
 
@@ -148,9 +149,7 @@
 <div class="queue-view">
   <header class="queue-header">
     <button class="back-btn" onclick={onBack} aria-label="Back">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-      </svg>
+      <ArrowLeft size={24} />
     </button>
     <h2>Queue</h2>
     <span class="queue-count">{tracks.length} tracks</span>
@@ -184,7 +183,7 @@
         >
           <div class="track-indicator">
             {#if track.id === currentTrackId}
-              <span class="now-playing-icon">▶</span>
+              <Play size={14} fill="#1db954" color="#1db954" />
             {:else}
               <span class="track-num">{idx + 1}</span>
             {/if}
@@ -208,9 +207,7 @@
               aria-label="Move up"
               data-testid="move-up"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
-              </svg>
+              <ChevronUp size={18} />
             </button>
             <button
               class="move-btn"
@@ -219,9 +216,7 @@
               aria-label="Move down"
               data-testid="move-down"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
-              </svg>
+              <ChevronDown size={18} />
             </button>
           </div>
         </div>
@@ -341,11 +336,6 @@
 
   .queue-item.current .track-indicator {
     background: rgba(29, 185, 84, 0.2);
-  }
-
-  .now-playing-icon {
-    color: #1db954;
-    font-size: 0.7rem;
   }
 
   .track-num {

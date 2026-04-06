@@ -2,6 +2,7 @@
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState } from '../stores/player.svelte';
+  import { Home, Settings, Folder as FolderIcon, ArrowUp, Play } from 'lucide-svelte';
 
   let { onNavigateToPlayer, onOpenSettings, onNavigateHome }: {
     onNavigateToPlayer: () => void;
@@ -75,9 +76,7 @@
   <header class="nav-header">
     <div class="breadcrumbs">
       <button class="crumb home-btn" onclick={onNavigateHome} aria-label="Home" title="Device selection">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-        </svg>
+        <Home size={18} />
       </button>
       <span class="separator">/</span>
       <button class="crumb" onclick={() => loadFolders('')}>Music</button>
@@ -94,9 +93,7 @@
         <option value="play_count:desc">Most played</option>
       </select>
       <button class="icon-btn" onclick={onOpenSettings} aria-label="Settings" title="Settings">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>
-        </svg>
+        <Settings size={20} />
       </button>
     </div>
   </header>
@@ -108,7 +105,7 @@
   <!-- Play all button for current folder -->
   {#if trackCount > 0}
     <button class="play-all-btn" onclick={() => playFolder(currentPath)}>
-      <span class="play-all-icon">▶</span>
+      <Play size={18} fill="currentColor" />
       <span>Play all {trackCount} tracks</span>
     </button>
   {/if}
@@ -119,7 +116,7 @@
     <div class="folder-list">
       {#if currentPath}
         <button class="folder-item" onclick={navigateUp}>
-          <span class="folder-icon">⬆</span>
+          <span class="folder-icon"><ArrowUp size={20} /></span>
           <span class="folder-name">..</span>
         </button>
       {/if}
@@ -127,11 +124,11 @@
       {#each folders as folder}
         <div class="folder-item">
           <button class="folder-link" onclick={() => navigateTo(folder.path)}>
-            <span class="folder-icon">📁</span>
+            <span class="folder-icon"><FolderIcon size={20} /></span>
             <span class="folder-name">{folder.name}</span>
           </button>
           <button class="play-btn" onclick={() => playFolder(folder.path)} title="Play all in folder">
-            ▶
+            <Play size={16} fill="currentColor" />
           </button>
         </div>
       {/each}
@@ -241,10 +238,6 @@
 
   .play-all-btn:hover {
     filter: brightness(1.1);
-  }
-
-  .play-all-icon {
-    font-size: 0.9rem;
   }
 
   .folder-list {
