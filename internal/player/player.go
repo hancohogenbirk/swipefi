@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -186,8 +187,12 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.currentStreamURL = streamURL
 	slog.Info("playing track", "title", track.Title, "artist", track.Artist, "url", streamURL)
 
+	// Build DIDL-Lite metadata so the renderer shows track info and art
+	artURL := fmt.Sprintf("http://%s:%s/api/tracks/%d/art", p.localIP, p.port, track.ID)
+	metadata := buildDIDLMetadata(track, streamURL, artURL)
+
 	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
-	if err := p.tryPlayWithRetry(ctx, streamURL); err != nil {
+	if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
 		return err
 	}
 
@@ -205,11 +210,9 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 }
 
 // tryPlayWithRetry attempts SetURI + Play with one retry on failure.
-// DLNA renderers (especially WiiM) sometimes return EOF on the first attempt
-// after being idle or when another app was using the device.
-func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL string) error {
+func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL, metadata string) error {
 	for attempt := 0; attempt < 2; attempt++ {
-		err := p.transport.SetURI(ctx, streamURL, "")
+		err := p.transport.SetURI(ctx, streamURL, metadata)
 		if err == nil {
 			err = p.transport.Play(ctx)
 		}
@@ -224,6 +227,49 @@ func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL string) error {
 		return fmt.Errorf("play: %w", err)
 	}
 	return nil
+}
+
+// buildDIDLMetadata creates DIDL-Lite XML for UPnP renderers to display track info.
+func buildDIDLMetadata(track *store.Track, streamURL, artURL string) string {
+	escape := func(s string) string {
+		s = strings.ReplaceAll(s, "&", "&amp;")
+		s = strings.ReplaceAll(s, "<", "&lt;")
+		s = strings.ReplaceAll(s, ">", "&gt;")
+		s = strings.ReplaceAll(s, "\"", "&quot;")
+		return s
+	}
+
+	title := escape(track.Title)
+	artist := escape(track.Artist)
+	album := escape(track.Album)
+
+	mime := "audio/flac"
+	switch strings.ToLower(track.Format) {
+	case "mp3":
+		mime = "audio/mpeg"
+	case "wav":
+		mime = "audio/wav"
+	case "aiff":
+		mime = "audio/aiff"
+	case "ogg":
+		mime = "audio/ogg"
+	case "aac", "m4a":
+		mime = "audio/mp4"
+	case "dsf":
+		mime = "audio/dsf"
+	case "dff":
+		mime = "audio/dff"
+	}
+
+	return `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">` +
+		`<item id="0" parentID="-1" restricted="1">` +
+		`<dc:title>` + title + `</dc:title>` +
+		`<dc:creator>` + artist + `</dc:creator>` +
+		`<upnp:artist>` + artist + `</upnp:artist>` +
+		`<upnp:album>` + album + `</upnp:album>` +
+		`<upnp:albumArtURI>` + escape(artURL) + `</upnp:albumArtURI>` +
+		`<res protocolInfo="http-get:*:` + mime + `:*">` + escape(streamURL) + `</res>` +
+		`</item></DIDL-Lite>`
 }
 
 func (p *Player) Pause(ctx context.Context) error {
