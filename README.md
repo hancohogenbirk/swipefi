@@ -22,6 +22,9 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - External device takeover detection (transitions to idle when another app takes over)
 - Browser back button support with in-tab navigation
 - DLNA connection retry on transient failures
+- Fast library scanning (single-pass, optimized for network shares)
+- Automatic partial rescan after rejecting tracks
+- Scan cancellation when music directory changes
 - Configurable music directory via in-app settings
 - Single Docker container, single binary
 - Auto-updates via Watchtower
