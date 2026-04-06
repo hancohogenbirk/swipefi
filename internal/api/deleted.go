@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -94,6 +95,23 @@ func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
 
 		slog.Info("restored track", "id", id, "path", track.Path)
 		restored++
+	}
+
+	// Trigger partial rescan of affected folders so restored tracks show in library
+	rescanFolders := make(map[string]bool)
+	for _, id := range req.IDs {
+		track, err := a.store.GetTrack(r.Context(), id)
+		if err == nil && !track.Deleted {
+			folder := filepath.Dir(track.Path)
+			rescanFolders[folder] = true
+		}
+	}
+	if len(rescanFolders) > 0 {
+		go func() {
+			for folder := range rescanFolders {
+				a.scanner.ScanFolder(context.Background(), folder)
+			}
+		}()
 	}
 
 	result := map[string]any{

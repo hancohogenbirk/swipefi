@@ -94,7 +94,6 @@
 
       // If something is already playing, go straight to Now Playing
       if (playerState.state !== 'idle' && playerState.track) {
-        // Auto-select the first device if available (renderer is already set server-side)
         if (devices.length > 0) {
           selectedDevice = devices[0].udn;
         }
@@ -103,8 +102,15 @@
         return;
       }
 
-      // Otherwise show device selection
-      appPhase = 'setup';
+      // Music dir is configured — go to main app (folders tab)
+      // Only show device selection if no devices found at all
+      if (devices.length > 0) {
+        selectedDevice = devices[0].udn;
+        appPhase = 'main';
+        activeTab = 'folders';
+      } else {
+        appPhase = 'setup';
+      }
     } catch (e) {
       console.error('[swipefi] init error:', e);
       appPhase = 'choose-dir';

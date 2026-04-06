@@ -98,7 +98,7 @@
     <div class="empty">No files marked for deletion</div>
   {:else}
     <div class="actions-bar">
-      <button class="select-all-btn" onclick={toggleAll}>
+      <button class="select-all-btn" onclick={toggleAll} disabled={busy}>
         {#if allSelected}
           <CheckSquare2 size={18} />
         {:else}
@@ -110,7 +110,7 @@
       {#if selected.size > 0}
         <button class="restore-btn" onclick={restoreSelected} disabled={busy}>
           <RotateCcw size={16} />
-          <span>{busy ? 'Restoring...' : `Restore (${selected.size})`}</span>
+          <span>Restore ({selected.size})</span>
         </button>
         <button class="purge-btn" onclick={() => showPurgeConfirm = true} disabled={busy}>
           <Trash2 size={16} />
@@ -119,26 +119,34 @@
       {/if}
     </div>
 
-    <div class="track-list">
-      {#each tracks as track (track.id)}
-        <button class="track-item" class:selected={selected.has(track.id)} onclick={() => toggleSelect(track.id)}>
-          <div class="checkbox">
-            {#if selected.has(track.id)}
-              <CheckSquare size={20} />
-            {:else}
-              <Square size={20} />
-            {/if}
-          </div>
-          <div class="track-details">
-            <span class="track-title">{track.title}</span>
-            <span class="track-meta">
-              {track.artist || 'Unknown'}
-              {#if track.album} · {track.album}{/if}
-              {#if track.play_count > 0} · {track.play_count}×{/if}
-            </span>
-          </div>
-        </button>
-      {/each}
+    <div class="track-list-container">
+      {#if busy}
+        <div class="busy-overlay">
+          <div class="busy-spinner"></div>
+          <span>Processing...</span>
+        </div>
+      {/if}
+      <div class="track-list" class:dimmed={busy}>
+        {#each tracks as track (track.id)}
+          <button class="track-item" class:selected={selected.has(track.id)} onclick={() => { if (!busy) toggleSelect(track.id); }} disabled={busy}>
+            <div class="checkbox">
+              {#if selected.has(track.id)}
+                <CheckSquare size={20} />
+              {:else}
+                <Square size={20} />
+              {/if}
+            </div>
+            <div class="track-details">
+              <span class="track-title">{track.title}</span>
+              <span class="track-meta">
+                {track.artist || 'Unknown'}
+                {#if track.album} · {track.album}{/if}
+                {#if track.play_count > 0} · {track.play_count}×{/if}
+              </span>
+            </div>
+          </button>
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -247,17 +255,56 @@
     font-weight: 600;
   }
 
-  .restore-btn:disabled, .purge-btn:disabled {
+  .restore-btn:disabled, .purge-btn:disabled, .select-all-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .track-list {
+  .track-list-container {
     flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+
+  .busy-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    z-index: 10;
+    border-radius: 8px;
+    color: #ccc;
+    font-size: 0.9rem;
+  }
+
+  .busy-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #333;
+    border-top-color: #1db954;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .track-list {
+    height: 100%;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 1px;
+  }
+
+  .track-list.dimmed {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
   .track-item {

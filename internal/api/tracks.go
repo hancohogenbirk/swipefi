@@ -52,8 +52,15 @@ func (a *API) ListTracks(w http.ResponseWriter, r *http.Request) {
 	folder := r.URL.Query().Get("folder")
 	sort := r.URL.Query().Get("sort")
 	order := r.URL.Query().Get("order")
+	direct := r.URL.Query().Get("direct") == "true"
 
-	tracks, err := a.store.ListTracks(r.Context(), folder, sort, order)
+	var tracks []store.Track
+	var err error
+	if direct {
+		tracks, err = a.store.ListTracksDirectOnly(r.Context(), folder, sort, order)
+	} else {
+		tracks, err = a.store.ListTracks(r.Context(), folder, sort, order)
+	}
 	if err != nil {
 		slog.Error("list tracks", "folder", folder, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to list tracks")

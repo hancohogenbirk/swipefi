@@ -93,18 +93,15 @@ func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
 	return &t, nil
 }
 
+// ListTracks returns tracks in a folder recursively (for playback queue building).
 func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
 	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
 		FROM tracks WHERE deleted = 0`
 
 	var args []any
 	if folder != "" {
-		// Only match direct children: path starts with folder/ but has no further /
-		query += " AND path LIKE ? AND path NOT LIKE ?"
-		args = append(args, folder+"/%", folder+"/%/%")
-	} else {
-		// Root: only files with no / in path (direct children of music dir)
-		query += " AND path NOT LIKE '%/%'"
+		query += " AND path LIKE ?"
+		args = append(args, folder+"/%")
 	}
 
 	sortCol := "added_at"
@@ -122,6 +119,53 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks: %w", err)
+	}
+	defer rows.Close()
+
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		var lastPlayed sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			return nil, fmt.Errorf("scan track: %w", err)
+		}
+		if lastPlayed.Valid {
+			t.LastPlayed = &lastPlayed.Int64
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, rows.Err()
+}
+
+// ListTracksDirectOnly returns only tracks that are direct children of a folder (not in subfolders).
+func (s *Store) ListTracksDirectOnly(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
+	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		FROM tracks WHERE deleted = 0`
+
+	var args []any
+	if folder != "" {
+		query += " AND path LIKE ? AND path NOT LIKE ?"
+		args = append(args, folder+"/%", folder+"/%/%")
+	} else {
+		query += " AND path NOT LIKE '%/%'"
+	}
+
+	sortCol := "added_at"
+	if sortBy == "play_count" {
+		sortCol = "play_count"
+	}
+
+	orderDir := "ASC"
+	if order == "desc" {
+		orderDir = "DESC"
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s %s", sortCol, orderDir)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tracks direct: %w", err)
 	}
 	defer rows.Close()
 

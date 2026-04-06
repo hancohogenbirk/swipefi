@@ -26,9 +26,11 @@
     try {
       folders = (await api.folders(path)) ?? [];
       currentPath = path;
-      // Also load tracks in this folder
-      tracks = (await api.tracks(path || '', getSort(), getOrder())) ?? [];
-      trackCount = tracks.length;
+      // Direct children for display
+      tracks = (await api.tracksDirectOnly(path || '', getSort(), getOrder())) ?? [];
+      // Recursive count for the "Play all" button
+      const allTracks = await api.tracks(path || '', getSort(), getOrder());
+      trackCount = allTracks?.length ?? 0;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load folders';
     } finally {

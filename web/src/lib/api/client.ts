@@ -54,6 +54,8 @@ export const api = {
   folders: (path = '') => request<Folder[]>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
   tracks: (folder: string, sort = 'added_at', order = 'asc') =>
     request<Track[]>('GET', `/api/tracks?folder=${encodeURIComponent(folder)}&sort=${sort}&order=${order}`),
+  tracksDirectOnly: (folder: string, sort = 'added_at', order = 'asc') =>
+    request<Track[]>('GET', `/api/tracks?folder=${encodeURIComponent(folder)}&sort=${sort}&order=${order}&direct=true`),
   scanLibrary: () => request<{ status: string; tracks: number }>('POST', '/api/library/scan'),
   scanStatus: () => request<{ scanning: boolean; scanned: number; total: number }>('GET', '/api/library/scan/status'),
 
