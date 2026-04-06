@@ -85,4 +85,11 @@ export const api = {
   devices: () => request<Device[]>('GET', '/api/devices'),
   selectDevice: (udn: string) => request<{ status: string; device: string }>('POST', '/api/devices/select', { udn }),
   scanDevices: () => request<Device[]>('POST', '/api/devices/scan'),
+
+  // Deleted tracks
+  listDeleted: () => request<Track[]>('GET', '/api/deleted'),
+  restoreDeleted: (ids: number[]) =>
+    request<{ status: string; restored: number }>('POST', '/api/deleted/restore', { ids }),
+  purgeDeleted: (ids: number[], all = false) =>
+    request<{ status: string; purged: number }>('POST', '/api/deleted/purge', all ? { all: true } : { ids }),
 };
