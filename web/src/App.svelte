@@ -6,12 +6,16 @@
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import Settings from './lib/components/Settings.svelte';
   import QueueView from './lib/components/QueueView.svelte';
+  import BottomNav from './lib/components/BottomNav.svelte';
+  import MiniPlayer from './lib/components/MiniPlayer.svelte';
 
-  type View = 'loading' | 'choose-dir' | 'setup' | 'folders' | 'player' | 'queue' | 'settings';
+  type AppPhase = 'loading' | 'choose-dir' | 'setup' | 'main';
+  type Tab = 'folders' | 'player' | 'settings';
 
-  let previousView = $state<View>('folders');
+  let appPhase = $state<AppPhase>('loading');
+  let activeTab = $state<Tab>('folders');
+  let showQueue = $state(false);
 
-  let view = $state<View>('loading');
   let devices = $state<Device[]>([]);
   let selectedDevice = $state('');
   let error = $state('');
@@ -26,7 +30,7 @@
       connectWebSocket();
 
       if (!config.music_dir) {
-        view = 'choose-dir';
+        appPhase = 'choose-dir';
         return;
       }
 
@@ -54,15 +58,16 @@
         if (devices.length > 0) {
           selectedDevice = devices[0].udn;
         }
-        view = 'player';
+        appPhase = 'main';
+        activeTab = 'player';
         return;
       }
 
       // Otherwise show device selection
-      view = 'setup';
+      appPhase = 'setup';
     } catch (e) {
       console.error('[swipefi] init error:', e);
-      view = 'choose-dir';
+      appPhase = 'choose-dir';
     }
   });
 
@@ -91,7 +96,7 @@
   }
 
   async function onMusicDirChosen() {
-    view = 'loading';
+    appPhase = 'loading';
     startScanPolling();
     devices = await api.devices();
     if (devices.length === 0) {
@@ -99,11 +104,11 @@
     }
 
     if (devices.length === 0) {
-      view = 'setup';
+      appPhase = 'setup';
     } else if (devices.length === 1) {
       await selectDevice(devices[0].udn);
     } else {
-      view = 'setup';
+      appPhase = 'setup';
     }
   }
 
@@ -116,7 +121,8 @@
       if (scanProgress.scanning) {
         startScanPolling();
       }
-      view = 'folders';
+      appPhase = 'main';
+      activeTab = 'folders';
       error = '';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to select device';
@@ -134,32 +140,10 @@
       error = e instanceof Error ? e.message : 'Scan failed';
     }
   }
-
-  function navigateToPlayer() {
-    view = 'player';
-  }
-
-  function navigateToFolders() {
-    view = 'folders';
-  }
-
-  function navigateToHome() {
-    view = 'setup';
-  }
-
-  function openSettings() {
-    previousView = view as View;
-    view = 'settings';
-  }
-
-  function closeSettings() {
-    // After settings change, always go to folders (music dir may have changed)
-    view = 'folders';
-  }
 </script>
 
 <div class="app">
-  {#if view === 'loading'}
+  {#if appPhase === 'loading'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
       {#if scanProgress.scanning && scanProgress.total > 0}
@@ -176,10 +160,10 @@
       {/if}
     </div>
 
-  {:else if view === 'choose-dir'}
+  {:else if appPhase === 'choose-dir'}
     <Settings onDone={onMusicDirChosen} />
 
-  {:else if view === 'setup'}
+  {:else if appPhase === 'setup'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
 
@@ -213,48 +197,44 @@
       </button>
     </div>
 
-  {:else if view === 'settings'}
-    <Settings onDone={closeSettings} />
-
-  {:else if view === 'folders'}
-    {#if scanProgress.scanning}
-      <div class="scan-banner">
-        <div class="scan-bar">
-          <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
-        </div>
-        <span class="scan-banner-text">
-          {#if scanProgress.total > 0}
-            Scanning: {scanProgress.scanned} / {scanProgress.total}
-          {:else}
-            Scanning library...
-          {/if}
-        </span>
+  {:else}
+    <!-- Main app with tabs -->
+    <div class="tab-content">
+      <div class="tab-panel" class:hidden={activeTab !== 'folders'}>
+        {#if scanProgress.scanning}
+          <div class="scan-banner">
+            <div class="scan-bar">
+              <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
+            </div>
+            <span class="scan-banner-text">
+              {#if scanProgress.total > 0}
+                Scanning: {scanProgress.scanned} / {scanProgress.total}
+              {:else}
+                Scanning library...
+              {/if}
+            </span>
+          </div>
+        {/if}
+        <FolderNav onNavigateToPlayer={() => activeTab = 'player'} />
       </div>
+
+      <div class="tab-panel" class:hidden={activeTab !== 'player'}>
+        {#if showQueue}
+          <QueueView onBack={() => showQueue = false} />
+        {:else}
+          <NowPlaying onBack={() => activeTab = 'folders'} onOpenQueue={() => showQueue = true} />
+        {/if}
+      </div>
+
+      <div class="tab-panel" class:hidden={activeTab !== 'settings'}>
+        <Settings onDone={() => activeTab = 'folders'} />
+      </div>
+    </div>
+
+    {#if activeTab !== 'player'}
+      <MiniPlayer onClick={() => activeTab = 'player'} />
     {/if}
-    <FolderNav onNavigateToPlayer={navigateToPlayer} onOpenSettings={openSettings} onNavigateHome={navigateToHome} />
-
-    {#if playerState.state !== 'idle' && playerState.track}
-      <button class="mini-player" onclick={navigateToPlayer}>
-        <img
-          src="/api/tracks/{playerState.track.id}/art"
-          alt=""
-          class="mini-art"
-          onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-        />
-        <div class="mini-info">
-          <span class="mini-title">{playerState.track.title}</span>
-          <span class="mini-artist">{playerState.track.artist || 'Unknown'}</span>
-        </div>
-        <span class="mini-state">{playerState.state === 'playing' ? '▶' : '⏸'}</span>
-        <div class="mini-progress" style="width: {playerState.duration_ms ? (playerState.position_ms / playerState.duration_ms * 100) : 0}%"></div>
-      </button>
-    {/if}
-
-  {:else if view === 'player'}
-    <NowPlaying onBack={navigateToFolders} onOpenQueue={() => view = 'queue'} />
-
-  {:else if view === 'queue'}
-    <QueueView onBack={() => view = 'player'} />
+    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; if (tab !== 'player') showQueue = false; }} />
   {/if}
 </div>
 
@@ -385,61 +365,18 @@
     color: #aaa;
   }
 
-  .mini-player {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: #1a1a1a;
-    border: none;
-    border-top: 1px solid #333;
-    color: #f0f0f0;
-    padding: 0.6rem 1rem;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .mini-art {
-    width: 42px;
-    height: 42px;
-    border-radius: 6px;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
-
-  .mini-info {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
+  .tab-content {
     flex: 1;
+    min-height: 0;
+    position: relative;
   }
 
-  .mini-title {
-    font-size: 0.9rem;
-    font-weight: 600;
+  .tab-panel {
+    height: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .mini-artist {
-    font-size: 0.75rem;
-    color: #888;
-  }
-
-  .mini-state {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-
-  .mini-progress {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    height: 2px;
-    background: #1db954;
-    transition: width 1s linear;
+  .tab-panel.hidden {
+    display: none;
   }
 </style>

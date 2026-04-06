@@ -2,12 +2,10 @@
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState } from '../stores/player.svelte';
-  import { Home, Settings, Folder as FolderIcon, ArrowUp, Play } from 'lucide-svelte';
+  import { Folder as FolderIcon, ArrowUp, Play } from 'lucide-svelte';
 
-  let { onNavigateToPlayer, onOpenSettings, onNavigateHome }: {
+  let { onNavigateToPlayer }: {
     onNavigateToPlayer: () => void;
-    onOpenSettings: () => void;
-    onNavigateHome: () => void;
   } = $props();
 
   let currentPath = $state('');
@@ -75,10 +73,6 @@
 <div class="folder-nav">
   <header class="nav-header">
     <div class="breadcrumbs">
-      <button class="crumb home-btn" onclick={onNavigateHome} aria-label="Home" title="Device selection">
-        <Home size={18} />
-      </button>
-      <span class="separator">/</span>
       <button class="crumb" onclick={() => loadFolders('')}>Music</button>
       {#each pathParts as part, i}
         <span class="separator">/</span>
@@ -92,9 +86,6 @@
         <option value="play_count:asc">Least played</option>
         <option value="play_count:desc">Most played</option>
       </select>
-      <button class="icon-btn" onclick={onOpenSettings} aria-label="Settings" title="Settings">
-        <Settings size={20} />
-      </button>
     </div>
   </header>
 
@@ -179,11 +170,6 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .home-btn {
-    display: flex;
-    align-items: center;
-  }
-
   .separator {
     color: #666;
     font-size: 0.8rem;
@@ -203,22 +189,6 @@
     border-radius: 8px;
     padding: 0.5rem;
     font-size: 0.85rem;
-  }
-
-  .icon-btn {
-    background: none;
-    border: none;
-    color: #888;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-  }
-
-  .icon-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f0f0f0;
   }
 
   .play-all-btn {
