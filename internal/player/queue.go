@@ -89,6 +89,13 @@ func (q *Queue) Reorder(ids []int64) {
 	}
 }
 
+// UpdateCurrentPlayCount updates the play count of the current track in-memory.
+func (q *Queue) UpdateCurrentPlayCount(count int) {
+	if q.pos >= 0 && q.pos < len(q.tracks) {
+		q.tracks[q.pos].PlayCount = count
+	}
+}
+
 // SkipTo jumps to the track with the given ID, removing all tracks before it.
 func (q *Queue) SkipTo(id int64) bool {
 	for i, t := range q.tracks {

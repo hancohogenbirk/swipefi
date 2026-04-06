@@ -52,6 +52,9 @@ type Player struct {
 	accumulatedMs  int64
 	playCounted    bool
 
+	// Expected stream URL for the current track
+	currentStreamURL string
+
 	// Current position from renderer
 	positionMs int64
 	durationMs int64
@@ -157,12 +160,14 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	track := p.queue.Current()
 	if track == nil {
 		p.state = StateIdle
+		p.currentStreamURL = ""
 		p.stopPollingLocked()
 		p.notify()
 		return nil
 	}
 
 	streamURL := fmt.Sprintf("http://%s:%s/stream/%s", p.localIP, p.port, track.Path)
+	p.currentStreamURL = streamURL
 	slog.Info("playing track", "title", track.Title, "artist", track.Artist, "url", streamURL)
 
 	if err := p.transport.SetURI(ctx, streamURL, ""); err != nil {
@@ -237,6 +242,7 @@ func (p *Player) Next(ctx context.Context) error {
 			p.transport.Stop(ctx)
 		}
 		p.state = StateIdle
+		p.currentStreamURL = ""
 		p.stopPollingLocked()
 		p.notify()
 		return nil
@@ -379,7 +385,11 @@ func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
 		track := p.queue.Current()
 		if track != nil {
 			p.store.IncrementPlayCount(ctx, track.ID)
-			slog.Info("play count incremented", "track_id", track.ID, "title", track.Title)
+			track.PlayCount++
+			if p.queue != nil {
+				p.queue.UpdateCurrentPlayCount(track.PlayCount)
+			}
+			slog.Info("play count incremented", "track_id", track.ID, "title", track.Title, "new_count", track.PlayCount)
 		}
 		p.playCounted = true
 	}
