@@ -173,3 +173,55 @@ func (s *Store) TrackCount(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0").Scan(&count)
 	return count, err
 }
+
+// ListDeleted returns all tracks marked as deleted.
+func (s *Store) ListDeleted(ctx context.Context) ([]Track, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		FROM tracks WHERE deleted = 1 ORDER BY title ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list deleted: %w", err)
+	}
+	defer rows.Close()
+
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		var lastPlayed sql.NullInt64
+		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			return nil, fmt.Errorf("scan deleted track: %w", err)
+		}
+		if lastPlayed.Valid {
+			t.LastPlayed = &lastPlayed.Int64
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, rows.Err()
+}
+
+// UnmarkDeleted sets deleted = 0 for the given track ID.
+func (s *Store) UnmarkDeleted(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE tracks SET deleted = 0 WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("unmark deleted %d: %w", id, err)
+	}
+	return nil
+}
+
+// PurgeTrack permanently removes a track from the database.
+func (s *Store) PurgeTrack(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM tracks WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("purge track %d: %w", id, err)
+	}
+	return nil
+}
+
+// DeletedCount returns the number of tracks marked as deleted.
+func (s *Store) DeletedCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 1").Scan(&count)
+	return count, err
+}
