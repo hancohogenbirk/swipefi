@@ -180,6 +180,80 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// ScanFolder rescans a specific folder and its subfolders.
+// Unlike Scan, it does not mark missing tracks as deleted.
+func (sc *Scanner) ScanFolder(ctx context.Context, folder string) (int, error) {
+	sc.mu.Lock()
+	musicDir := sc.musicDir
+	sc.mu.Unlock()
+
+	if musicDir == "" {
+		return 0, nil
+	}
+
+	dir := filepath.Join(musicDir, filepath.FromSlash(folder))
+	slog.Info("partial rescan", "folder", folder, "dir", dir)
+
+	var count int
+
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if d.IsDir() {
+			name := d.Name()
+			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
+				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if !IsAudioFile(d.Name()) {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(musicDir, path)
+		if err != nil {
+			return nil
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		meta, err := ReadMetadata(path, relPath)
+		if err != nil {
+			return nil
+		}
+
+		track := &store.Track{
+			Path:       meta.Path,
+			Title:      meta.Title,
+			Artist:     meta.Artist,
+			Album:      meta.Album,
+			DurationMs: meta.DurationMs,
+			Format:     meta.Format,
+			AddedAt:    meta.AddedAt,
+		}
+
+		if err := sc.store.UpsertTrack(ctx, track); err != nil {
+			return nil
+		}
+
+		count++
+		return nil
+	})
+
+	if err != nil {
+		return count, err
+	}
+
+	slog.Info("partial rescan complete", "folder", folder, "tracks", count)
+	return count, nil
+}
+
 func (sc *Scanner) ListFolders(path string) ([]FolderEntry, error) {
 	sc.mu.Lock()
 	musicDir := sc.musicDir
