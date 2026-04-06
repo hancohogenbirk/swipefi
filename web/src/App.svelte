@@ -24,6 +24,40 @@
   let scanProgress = $state({ scanning: false, scanned: 0, total: 0 });
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
+  // --- History API for back button ---
+  let folderHistory = $state<string[]>([]);
+
+  function pushFolderHistory(path: string) {
+    folderHistory = [...folderHistory, path];
+    history.pushState({ type: 'folder', path }, '');
+  }
+
+  function pushQueueHistory() {
+    history.pushState({ type: 'queue' }, '');
+  }
+
+  let showExitConfirm = $state(false);
+
+  function handlePopState(e: PopStateEvent) {
+    // Queue sub-view: go back to now playing
+    if (showQueue) {
+      showQueue = false;
+      return;
+    }
+
+    // Folder navigation: go back to parent folder
+    if (activeTab === 'folders' && folderHistory.length > 0) {
+      folderHistory = folderHistory.slice(0, -1);
+      // FolderNav will react to this via a callback
+      return;
+    }
+
+    // At tab root — show exit confirmation
+    // Push a state back so we don't actually leave
+    history.pushState(null, '');
+    showExitConfirm = true;
+  }
+
   onMount(async () => {
     try {
       const config = await api.config();
@@ -69,11 +103,15 @@
       console.error('[swipefi] init error:', e);
       appPhase = 'choose-dir';
     }
+
+    window.addEventListener('popstate', handlePopState);
+    history.pushState(null, '');
   });
 
   onDestroy(() => {
     disconnectWebSocket();
     stopScanPolling();
+    window.removeEventListener('popstate', handlePopState);
   });
 
   function startScanPolling() {
@@ -215,14 +253,17 @@
             </span>
           </div>
         {/if}
-        <FolderNav onNavigateToPlayer={() => activeTab = 'player'} />
+        <FolderNav
+          onNavigateToPlayer={() => activeTab = 'player'}
+          onFolderNavigate={pushFolderHistory}
+        />
       </div>
 
       <div class="tab-panel" class:hidden={activeTab !== 'player'}>
         {#if showQueue}
           <QueueView onBack={() => showQueue = false} />
         {:else}
-          <NowPlaying onBack={() => activeTab = 'folders'} onOpenQueue={() => showQueue = true} />
+          <NowPlaying onBack={() => activeTab = 'folders'} onOpenQueue={() => { showQueue = true; pushQueueHistory(); }} />
         {/if}
       </div>
 
@@ -235,6 +276,18 @@
       <MiniPlayer onClick={() => activeTab = 'player'} />
     {/if}
     <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; if (tab !== 'player') showQueue = false; }} />
+
+    {#if showExitConfirm}
+      <div class="exit-overlay" onclick={() => showExitConfirm = false}>
+        <div class="exit-dialog" onclick={(e) => e.stopPropagation()}>
+          <p>Leave SwipeFi?</p>
+          <div class="exit-actions">
+            <button class="exit-cancel" onclick={() => showExitConfirm = false}>Cancel</button>
+            <button class="exit-leave" onclick={() => history.back()}>Leave</button>
+          </div>
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -378,5 +431,54 @@
 
   .tab-panel.hidden {
     display: none;
+  }
+
+  .exit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .exit-dialog {
+    background: #1e1e1e;
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    text-align: center;
+    min-width: 250px;
+  }
+
+  .exit-dialog p {
+    font-size: 1.1rem;
+    margin: 0 0 1.25rem;
+  }
+
+  .exit-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  .exit-cancel {
+    background: #333;
+    border: none;
+    color: #f0f0f0;
+    padding: 0.6rem 1.5rem;
+    border-radius: 24px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+
+  .exit-leave {
+    background: #ff4444;
+    border: none;
+    color: white;
+    padding: 0.6rem 1.5rem;
+    border-radius: 24px;
+    font-size: 0.95rem;
+    cursor: pointer;
   }
 </style>

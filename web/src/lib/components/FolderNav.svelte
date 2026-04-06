@@ -4,8 +4,9 @@
   import { updateState } from '../stores/player.svelte';
   import { Folder as FolderIcon, ArrowUp, Play } from 'lucide-svelte';
 
-  let { onNavigateToPlayer }: {
+  let { onNavigateToPlayer, onFolderNavigate }: {
     onNavigateToPlayer: () => void;
+    onFolderNavigate?: (path: string) => void;
   } = $props();
 
   let currentPath = $state('');
@@ -46,6 +47,7 @@
 
   function navigateTo(path: string) {
     loadFolders(path);
+    onFolderNavigate?.(path);
   }
 
   function navigateUp() {
@@ -57,6 +59,7 @@
   function navigateToBreadcrumb(index: number) {
     const path = pathParts.slice(0, index + 1).join('/');
     loadFolders(path);
+    onFolderNavigate?.(path);
   }
 
   function handleSortChange(e: Event) {
