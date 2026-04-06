@@ -12,6 +12,16 @@
   let ps = $derived(getPlayerState());
   let currentTrackId = $derived(ps.track?.id);
 
+  let lastTrackId = $state<number | undefined>(undefined);
+
+  $effect(() => {
+    const currentId = ps.track?.id;
+    if (currentId !== undefined && currentId !== lastTrackId) {
+      lastTrackId = currentId;
+      loadQueue();
+    }
+  });
+
   // Drag state
   let dragIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
