@@ -96,12 +96,11 @@ func (q *Queue) UpdateCurrentPlayCount(count int) {
 	}
 }
 
-// SkipTo jumps to the track with the given ID, removing all tracks before it.
+// SkipTo jumps to the track with the given ID, setting it as the current position.
 func (q *Queue) SkipTo(id int64) bool {
 	for i, t := range q.tracks {
 		if t.ID == id {
-			q.tracks = q.tracks[i:]
-			q.pos = 0
+			q.pos = i
 			return true
 		}
 	}

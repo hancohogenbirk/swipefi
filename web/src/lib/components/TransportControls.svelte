@@ -110,12 +110,13 @@
 
   .skip-label {
     position: absolute;
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     font-weight: 800;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -20%);
+    transform: translate(-50%, -15%);
     pointer-events: none;
+    line-height: 1;
   }
 
   .play-pause-btn {

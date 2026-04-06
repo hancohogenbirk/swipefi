@@ -170,11 +170,9 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.currentStreamURL = streamURL
 	slog.Info("playing track", "title", track.Title, "artist", track.Artist, "url", streamURL)
 
-	if err := p.transport.SetURI(ctx, streamURL, ""); err != nil {
-		return fmt.Errorf("set uri: %w", err)
-	}
-	if err := p.transport.Play(ctx); err != nil {
-		return fmt.Errorf("play: %w", err)
+	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
+	if err := p.tryPlayWithRetry(ctx, streamURL); err != nil {
+		return err
 	}
 
 	p.state = StatePlaying
@@ -187,6 +185,28 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 
 	p.startPollingLocked(ctx)
 	p.notify()
+	return nil
+}
+
+// tryPlayWithRetry attempts SetURI + Play with one retry on failure.
+// DLNA renderers (especially WiiM) sometimes return EOF on the first attempt
+// after being idle or when another app was using the device.
+func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL string) error {
+	for attempt := 0; attempt < 2; attempt++ {
+		err := p.transport.SetURI(ctx, streamURL, "")
+		if err == nil {
+			err = p.transport.Play(ctx)
+		}
+		if err == nil {
+			return nil
+		}
+		if attempt == 0 {
+			slog.Warn("play failed, retrying", "err", err, "attempt", attempt+1)
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		return fmt.Errorf("play: %w", err)
+	}
 	return nil
 }
 

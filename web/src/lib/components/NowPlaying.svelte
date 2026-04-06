@@ -129,6 +129,7 @@
     justify-content: center;
     min-height: 0;
     padding: 0.5rem;
+    overflow: hidden;
   }
 
   .controls-area {

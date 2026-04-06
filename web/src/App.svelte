@@ -59,6 +59,10 @@
   }
 
   onMount(async () => {
+    // Register history/back button handler immediately so it works on all paths
+    window.addEventListener('popstate', handlePopState);
+    history.pushState(null, '');
+
     try {
       const config = await api.config();
       connectWebSocket();
@@ -103,9 +107,6 @@
       console.error('[swipefi] init error:', e);
       appPhase = 'choose-dir';
     }
-
-    window.addEventListener('popstate', handlePopState);
-    history.pushState(null, '');
   });
 
   onDestroy(() => {
@@ -275,7 +276,7 @@
     {#if activeTab !== 'player'}
       <MiniPlayer onClick={() => activeTab = 'player'} />
     {/if}
-    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; if (tab !== 'player') showQueue = false; }} />
+    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; showQueue = false; }} />
 
     {#if showExitConfirm}
       <div class="exit-overlay" onclick={() => showExitConfirm = false}>

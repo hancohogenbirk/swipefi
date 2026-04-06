@@ -157,11 +157,11 @@
   .swipe-card {
     background: linear-gradient(145deg, #1e1e1e, #2a2a2a);
     border-radius: 20px;
-    padding: 2rem 1.5rem;
+    padding: 1.5rem 1.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.25rem;
+    gap: 1rem;
     user-select: none;
     touch-action: pan-y;
     position: relative;
@@ -169,6 +169,7 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     width: 100%;
     max-width: 340px;
+    max-height: 100%;
     margin: 0 auto;
     cursor: grab;
   }
