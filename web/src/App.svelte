@@ -6,6 +6,7 @@
   import NowPlaying from './lib/components/NowPlaying.svelte';
   import Settings from './lib/components/Settings.svelte';
   import QueueView from './lib/components/QueueView.svelte';
+  import DeletedManager from './lib/components/DeletedManager.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
   import MiniPlayer from './lib/components/MiniPlayer.svelte';
 
@@ -15,6 +16,7 @@
   let appPhase = $state<AppPhase>('loading');
   let activeTab = $state<Tab>('folders');
   let showQueue = $state(false);
+  let showDeletedManager = $state(false);
 
   let devices = $state<Device[]>([]);
   let selectedDevice = $state('');
@@ -269,14 +271,18 @@
       </div>
 
       <div class="tab-panel" class:hidden={activeTab !== 'settings'}>
-        <Settings onDone={() => activeTab = 'folders'} />
+        {#if showDeletedManager}
+          <DeletedManager onBack={() => showDeletedManager = false} />
+        {:else}
+          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} />
+        {/if}
       </div>
     </div>
 
     {#if activeTab !== 'player'}
       <MiniPlayer onClick={() => activeTab = 'player'} />
     {/if}
-    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; showQueue = false; }} />
+    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; showQueue = false; showDeletedManager = false; }} />
 
     {#if showExitConfirm}
       <div class="exit-overlay" onclick={() => showExitConfirm = false}>

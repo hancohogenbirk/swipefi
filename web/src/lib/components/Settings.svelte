@@ -1,8 +1,8 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { X, Folder, ArrowUp, Zap } from 'lucide-svelte';
+  import { X, Folder, ArrowUp, Zap, Trash2 } from 'lucide-svelte';
 
-  let { onDone }: { onDone: () => void } = $props();
+  let { onDone, onOpenDeleted }: { onDone: () => void; onOpenDeleted?: () => void } = $props();
 
   let currentPath = $state('/');
   let parentPath = $state('/');
@@ -50,9 +50,21 @@
     }
   }
 
+  let deletedCount = $state(0);
+
+  async function loadDeletedCount() {
+    try {
+      const tracks = await api.listDeleted();
+      deletedCount = tracks?.length ?? 0;
+    } catch {
+      // ignore
+    }
+  }
+
   // Start browsing from root and load shortcuts
   browse('/');
   loadShortcuts();
+  loadDeletedCount();
 </script>
 
 <div class="settings">
@@ -110,6 +122,17 @@
       {saving ? 'Saving...' : `Use "${currentPath.split('/').pop() || currentPath}"`}
     </button>
   </div>
+
+  {#if onOpenDeleted}
+    <div class="section-divider"></div>
+    <button class="deleted-btn" onclick={onOpenDeleted}>
+      <Trash2 size={20} />
+      <span>Marked for Deletion</span>
+      {#if deletedCount > 0}
+        <span class="deleted-count">{deletedCount}</span>
+      {/if}
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -247,5 +270,43 @@
   .error {
     color: #ff6b6b;
     padding: 0.5rem;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: #222;
+    margin: 1rem 0;
+  }
+
+  .deleted-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 1rem;
+    color: #f0f0f0;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+  }
+
+  .deleted-btn:hover {
+    border-color: #ff4444;
+    background: #1e1e1e;
+  }
+
+  .deleted-count {
+    margin-left: auto;
+    background: #ff4444;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    min-width: 1.5rem;
+    text-align: center;
   }
 </style>
