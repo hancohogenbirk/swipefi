@@ -89,7 +89,7 @@ export const api = {
   // Deleted tracks
   listDeleted: () => request<Track[]>('GET', '/api/deleted'),
   restoreDeleted: (ids: number[]) =>
-    request<{ status: string; restored: number }>('POST', '/api/deleted/restore', { ids }),
+    request<{ status: string; restored: number; errors?: string[] }>('POST', '/api/deleted/restore', { ids }),
   purgeDeleted: (ids: number[], all = false) =>
     request<{ status: string; purged: number }>('POST', '/api/deleted/purge', all ? { all: true } : { ids }),
 };

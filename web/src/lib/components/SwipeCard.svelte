@@ -135,7 +135,8 @@
     />
     {#if showPlaceholder}
       <div class="art-placeholder">
-        <Music size={64} />
+        <Music size={48} />
+        <span class="no-art-label">No cover art</span>
       </div>
     {/if}
   </div>
@@ -226,9 +227,17 @@
     height: 100%;
     background: #333;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 0.5rem;
     color: #555;
+  }
+
+  .no-art-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .track-info {

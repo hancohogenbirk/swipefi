@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,23 +42,41 @@ func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
 	deleteDir := filepath.Join(musicDir, "to_delete")
 
 	restored := 0
+	var errors []string
 	for _, id := range req.IDs {
 		track, err := a.store.GetTrack(r.Context(), id)
 		if err != nil {
 			slog.Warn("restore: track not found", "id", id, "err", err)
+			errors = append(errors, fmt.Sprintf("track %d not found", id))
 			continue
 		}
 
 		src := filepath.Join(deleteDir, filepath.FromSlash(track.Path))
 		dst := filepath.Join(musicDir, filepath.FromSlash(track.Path))
 
+		slog.Info("restore: attempting", "id", id, "src", src, "dst", dst)
+
+		// Check if source file exists
+		if _, err := os.Stat(src); err != nil {
+			slog.Error("restore: source file not found", "src", src, "err", err)
+			// File might not be in to_delete — just unmark in DB
+			if err := a.store.UnmarkDeleted(r.Context(), id); err != nil {
+				slog.Error("restore: unmark", "id", id, "err", err)
+			}
+			errors = append(errors, fmt.Sprintf("%s: file not found in to_delete", track.Title))
+			restored++
+			continue
+		}
+
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 			slog.Error("restore: mkdir", "path", dst, "err", err)
+			errors = append(errors, fmt.Sprintf("%s: mkdir failed", track.Title))
 			continue
 		}
 
 		if err := os.Rename(src, dst); err != nil {
 			slog.Error("restore: rename", "src", src, "dst", dst, "err", err)
+			errors = append(errors, fmt.Sprintf("%s: move failed: %v", track.Title, err))
 			continue
 		}
 
@@ -72,10 +91,14 @@ func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
 		restored++
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	result := map[string]any{
 		"status":   "ok",
 		"restored": restored,
-	})
+	}
+	if len(errors) > 0 {
+		result["errors"] = errors
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *API) PurgeDeleted(w http.ResponseWriter, r *http.Request) {

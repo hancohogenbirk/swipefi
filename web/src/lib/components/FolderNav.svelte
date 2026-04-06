@@ -2,7 +2,7 @@
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState } from '../stores/player.svelte';
-  import { Folder as FolderIcon, ArrowUp, Play } from 'lucide-svelte';
+  import { Folder as FolderIcon, ArrowUp, Play, Music } from 'lucide-svelte';
 
   let { onNavigateToPlayer, onFolderNavigate }: {
     onNavigateToPlayer: () => void;
@@ -11,6 +11,7 @@
 
   let currentPath = $state('');
   let folders = $state<Folder[]>([]);
+  let tracks = $state<Track[]>([]);
   let trackCount = $state(0);
   let loading = $state(false);
   let error = $state('');
@@ -25,9 +26,9 @@
     try {
       folders = (await api.folders(path)) ?? [];
       currentPath = path;
-      // Also check how many tracks are in this folder
-      const tracks = await api.tracks(path || '', getSort(), getOrder());
-      trackCount = tracks?.length ?? 0;
+      // Also load tracks in this folder
+      tracks = (await api.tracks(path || '', getSort(), getOrder())) ?? [];
+      trackCount = tracks.length;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load folders';
     } finally {
@@ -130,6 +131,19 @@
       {#if folders.length === 0 && trackCount === 0 && !currentPath}
         <div class="empty">No folders found. Check your music directory in settings.</div>
       {/if}
+
+      {#each tracks as track (track.id)}
+        <div class="track-item">
+          <Music size={18} />
+          <div class="track-details">
+            <span class="track-title">{track.title}</span>
+            <span class="track-meta">
+              {track.artist || 'Unknown'}
+              {#if track.play_count > 0} · {track.play_count}×{/if}
+            </span>
+          </div>
+        </div>
+      {/each}
     </div>
   {/if}
 </div>
@@ -281,6 +295,36 @@
 
   .play-btn:hover {
     background: #1ed760;
+  }
+
+  .track-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #151515;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    color: #ccc;
+    font-size: 0.9rem;
+  }
+
+  .track-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .track-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-meta {
+    font-size: 0.7rem;
+    color: #666;
   }
 
   .loading, .empty, .error {

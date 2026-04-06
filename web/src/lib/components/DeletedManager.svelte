@@ -47,7 +47,10 @@
     if (selected.size === 0) return;
     error = '';
     try {
-      await api.restoreDeleted([...selected]);
+      const result = await api.restoreDeleted([...selected]);
+      if (result.errors?.length) {
+        error = result.errors.join('; ');
+      }
       await loadDeleted();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Restore failed';
