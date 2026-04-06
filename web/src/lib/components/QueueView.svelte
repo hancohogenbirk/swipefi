@@ -73,6 +73,8 @@
   }
 
   // --- Touch-based long-press drag ---
+  let listEl = $state<HTMLElement | null>(null);
+  let autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 
   function handleTouchStart(e: TouchEvent, idx: number) {
     const touch = e.touches[0];
@@ -106,6 +108,9 @@
     e.preventDefault();
     touchCurrentY = touch.clientY;
 
+    // Auto-scroll when dragging near top/bottom edge of visible list
+    handleEdgeScroll(touch.clientY);
+
     // Calculate which index we're hovering over
     const delta = touchCurrentY - touchStartY;
     const indexOffset = Math.round(delta / itemHeight);
@@ -118,8 +123,31 @@
     }
   }
 
+  function handleEdgeScroll(clientY: number) {
+    if (!listEl) return;
+    const rect = listEl.getBoundingClientRect();
+    const edgeZone = 60; // px from edge to trigger scroll
+
+    stopAutoScroll();
+    if (clientY < rect.top + edgeZone) {
+      // Near top — scroll up
+      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, -8), 16);
+    } else if (clientY > rect.bottom - edgeZone) {
+      // Near bottom — scroll down
+      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, 8), 16);
+    }
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollTimer) {
+      clearInterval(autoScrollTimer);
+      autoScrollTimer = null;
+    }
+  }
+
   function handleTouchEnd() {
     cancelHold();
+    stopAutoScroll();
     if (isDragging) {
       isDragging = false;
       dragIndex = null;
@@ -176,7 +204,7 @@
   {:else if tracks.length === 0}
     <div class="empty">Queue is empty</div>
   {:else}
-    <div class="queue-list" data-testid="queue-list">
+    <div class="queue-list" data-testid="queue-list" bind:this={listEl} class:no-scroll={isDragging}>
       {#each tracks as track, idx (track.id)}
         <div
           class="queue-item"
@@ -296,6 +324,10 @@
     flex-direction: column;
     gap: 1px;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .queue-list.no-scroll {
+    overflow-y: hidden;
   }
 
   .queue-item {

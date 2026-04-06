@@ -14,9 +14,15 @@
   type Tab = 'folders' | 'player' | 'settings';
 
   let appPhase = $state<AppPhase>('loading');
-  let activeTab = $state<Tab>('folders');
+  let savedTab = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('swipefi-tab') : null) as Tab | null;
+  let activeTab = $state<Tab>(savedTab || 'folders');
   let showQueue = $state(false);
   let showDeletedManager = $state(false);
+
+  // Persist active tab across refreshes
+  $effect(() => {
+    sessionStorage.setItem('swipefi-tab', activeTab);
+  });
 
   let devices = $state<Device[]>([]);
   let selectedDevice = $state('');
@@ -28,6 +34,7 @@
 
   // --- History API for back button ---
   let folderHistory = $state<string[]>([]);
+  let folderGoBackSignal = $state(0);
 
   function pushFolderHistory(path: string) {
     folderHistory = [...folderHistory, path];
@@ -50,7 +57,7 @@
     // Folder navigation: go back to parent folder
     if (activeTab === 'folders' && folderHistory.length > 0) {
       folderHistory = folderHistory.slice(0, -1);
-      // FolderNav will react to this via a callback
+      folderGoBackSignal++;
       return;
     }
 
@@ -92,22 +99,12 @@
         }
       }
 
-      // If something is already playing, go straight to Now Playing
-      if (playerState.state !== 'idle' && playerState.track) {
-        if (devices.length > 0) {
-          selectedDevice = devices[0].udn;
-        }
-        appPhase = 'main';
-        activeTab = 'player';
-        return;
-      }
-
-      // Music dir is configured — go to main app (folders tab)
-      // Only show device selection if no devices found at all
+      // Music dir is configured and device found — go to main app
+      // Restore the last active tab from sessionStorage
       if (devices.length > 0) {
         selectedDevice = devices[0].udn;
         appPhase = 'main';
-        activeTab = 'folders';
+        // activeTab is already set from sessionStorage or defaults to 'folders'
       } else {
         appPhase = 'setup';
       }
@@ -265,6 +262,7 @@
         <FolderNav
           onNavigateToPlayer={() => activeTab = 'player'}
           onFolderNavigate={pushFolderHistory}
+          goBackSignal={folderGoBackSignal}
         />
       </div>
 

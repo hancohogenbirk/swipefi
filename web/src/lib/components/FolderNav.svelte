@@ -4,9 +4,10 @@
   import { updateState } from '../stores/player.svelte';
   import { Folder as FolderIcon, ArrowUp, Play, Music } from 'lucide-svelte';
 
-  let { onNavigateToPlayer, onFolderNavigate }: {
+  let { onNavigateToPlayer, onFolderNavigate, goBackSignal = 0 }: {
     onNavigateToPlayer: () => void;
     onFolderNavigate?: (path: string) => void;
+    goBackSignal?: number;
   } = $props();
 
   let currentPath = $state('');
@@ -71,6 +72,15 @@
     setSort(sort);
     setOrder(order);
   }
+
+  // React to back signal from App (browser back button)
+  let lastBackSignal = $state(0);
+  $effect(() => {
+    if (goBackSignal > lastBackSignal) {
+      lastBackSignal = goBackSignal;
+      navigateUp();
+    }
+  });
 
   // Load root on mount
   loadFolders('');
