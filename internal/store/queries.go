@@ -174,6 +174,13 @@ func (s *Store) TrackCount(ctx context.Context) (int, error) {
 	return count, err
 }
 
+// TrackExistsByPath checks if a non-deleted track with the given path exists.
+func (s *Store) TrackExistsByPath(ctx context.Context, path string) bool {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE path = ? AND deleted = 0", path).Scan(&count)
+	return err == nil && count > 0
+}
+
 // ListDeleted returns all tracks marked as deleted.
 func (s *Store) ListDeleted(ctx context.Context) ([]Track, error) {
 	rows, err := s.db.QueryContext(ctx, `

@@ -77,15 +77,33 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	sc.initialScan = trackCount == 0
 	sc.mu.Unlock()
 
-	// Single walk: discover files and read metadata in one pass
-	// Use DB track count as initial estimate for progress bar
+	// Quick count of audio files (only readdir, no file opens — fast even over SMB)
+	total := 0
+	filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
+				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if IsAudioFile(d.Name()) {
+			total++
+		}
+		return nil
+	})
+
 	sc.mu.Lock()
-	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: trackCount}
+	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total}
 	sc.mu.Unlock()
+	slog.Info("scan: counted files", "total", total)
 
 	existingPaths := make(map[string]bool)
 	var count int
-	var discovered int
 
 	err := filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -110,19 +128,21 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 			return nil
 		}
 
-		discovered++
-		if discovered%50 == 0 {
-			sc.mu.Lock()
-			sc.status.Total = discovered
-			sc.mu.Unlock()
-		}
-
 		relPath, err := filepath.Rel(musicDir, path)
 		if err != nil {
 			return nil
 		}
 		relPath = filepath.ToSlash(relPath)
 		existingPaths[relPath] = true
+
+		// Skip metadata reading for tracks already in DB (major speedup on rescan)
+		if sc.store.TrackExistsByPath(scanCtx, relPath) {
+			count++
+			sc.mu.Lock()
+			sc.status.Scanned = count
+			sc.mu.Unlock()
+			return nil
+		}
 
 		meta, err := ReadMetadata(path, relPath)
 		if err != nil {
@@ -148,11 +168,10 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		count++
 		sc.mu.Lock()
 		sc.status.Scanned = count
-		sc.status.Total = discovered
 		sc.mu.Unlock()
 
 		if count%100 == 0 {
-			slog.Info("scan progress", "tracks", count, "total", discovered)
+			slog.Info("scan progress", "tracks", count, "total", total)
 		}
 
 		return nil
