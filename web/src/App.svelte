@@ -270,7 +270,7 @@
         {#if showQueue}
           <QueueView onBack={() => showQueue = false} />
         {:else}
-          <NowPlaying onBack={() => activeTab = 'folders'} onOpenQueue={() => { showQueue = true; pushQueueHistory(); }} />
+          <NowPlaying onOpenQueue={() => { showQueue = true; pushQueueHistory(); }} />
         {/if}
       </div>
 

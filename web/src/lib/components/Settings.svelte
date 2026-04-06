@@ -1,16 +1,28 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { X, Folder, ArrowUp, Zap, Trash2, Speaker, Unplug } from 'lucide-svelte';
+  import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
   let { onDone, onOpenDeleted, onDisconnect }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void } = $props();
 
+  // Music dir browser state
+  let musicDir = $state('');
+  let browseOpen = $state(false);
   let currentPath = $state('/');
   let parentPath = $state('/');
   let entries = $state<{ name: string; path: string; is_dir: boolean }[]>([]);
   let loading = $state(false);
   let saving = $state(false);
   let error = $state('');
+
+  async function loadConfig() {
+    try {
+      const config = await api.config();
+      musicDir = config.music_dir || '';
+    } catch {
+      // ignore
+    }
+  }
 
   async function browse(path: string) {
     loading = true;
@@ -32,12 +44,20 @@
     error = '';
     try {
       await api.setMusicDir(currentPath);
+      musicDir = currentPath;
+      browseOpen = false;
       onDone();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save';
     } finally {
       saving = false;
     }
+  }
+
+  function openBrowser() {
+    browseOpen = true;
+    browse(musicDir || '/');
+    loadShortcuts();
   }
 
   let shortcuts = $state<{ name: string; path: string }[]>([]);
@@ -84,89 +104,102 @@
     }
   }
 
-  // Start browsing from root and load shortcuts
-  browse('/');
-  loadShortcuts();
+  loadConfig();
   loadDeletedCount();
   loadDeviceInfo();
 </script>
 
 <div class="settings">
-  <header class="settings-header">
-    <div class="settings-title-row">
-      <h2>Choose Music Directory</h2>
-      <button class="close-btn" onclick={onDone} aria-label="Close settings"><X size={20} /></button>
-    </div>
-    <p class="current-path">{currentPath}</p>
-  </header>
-
   {#if error}
     <div class="error">{error}</div>
   {/if}
 
-  {#if shortcuts.length > 0 && currentPath === '/'}
-    <div class="shortcuts">
-      <p class="section-label">Quick access</p>
-      {#each shortcuts as sc}
-        <button class="dir-item shortcut" onclick={() => browse(sc.path)}>
-          <span class="dir-icon"><Zap size={20} /></span>
-          <span class="dir-name">{sc.name}</span>
-        </button>
-      {/each}
+  <!-- Music Directory -->
+  <button class="settings-item" onclick={() => browseOpen ? browseOpen = false : openBrowser()}>
+    <FolderOpen size={20} />
+    <div class="item-content">
+      <span class="item-label">Music Directory</span>
+      <span class="item-value">{musicDir || 'Not set'}</span>
     </div>
-    <p class="section-label">Browse filesystem</p>
-  {/if}
-
-  <div class="dir-list">
-    {#if currentPath !== '/'}
-      <button class="dir-item" onclick={() => browse(parentPath)}>
-        <span class="dir-icon"><ArrowUp size={20} /></span>
-        <span class="dir-name">..</span>
-      </button>
-    {/if}
-
-    {#if loading}
-      <div class="loading">Loading...</div>
+    {#if browseOpen}
+      <ChevronUp size={18} />
     {:else}
-      {#each entries as entry}
-        <button class="dir-item" onclick={() => browse(entry.path)}>
-          <span class="dir-icon"><Folder size={20} /></span>
-          <span class="dir-name">{entry.name}</span>
-        </button>
-      {/each}
-
-      {#if entries.length === 0}
-        <div class="empty">No subdirectories</div>
-      {/if}
+      <ChevronDown size={18} />
     {/if}
-  </div>
+  </button>
 
-  <div class="actions">
-    <button class="select-btn" onclick={selectDir} disabled={saving}>
-      {saving ? 'Saving...' : `Use "${currentPath.split('/').pop() || currentPath}"`}
-    </button>
-  </div>
+  {#if browseOpen}
+    <div class="browser">
+      {#if shortcuts.length > 0 && currentPath === '/'}
+        <div class="shortcuts">
+          {#each shortcuts as sc}
+            <button class="dir-item shortcut" onclick={() => browse(sc.path)}>
+              <Zap size={18} />
+              <span class="dir-name">{sc.name}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
 
+      <div class="browser-path">{currentPath}</div>
+
+      <div class="dir-list">
+        {#if currentPath !== '/'}
+          <button class="dir-item" onclick={() => browse(parentPath)}>
+            <ArrowUp size={18} />
+            <span class="dir-name">..</span>
+          </button>
+        {/if}
+
+        {#if loading}
+          <div class="loading">Loading...</div>
+        {:else}
+          {#each entries as entry}
+            <button class="dir-item" onclick={() => browse(entry.path)}>
+              <Folder size={18} />
+              <span class="dir-name">{entry.name}</span>
+            </button>
+          {/each}
+
+          {#if entries.length === 0}
+            <div class="empty">No subdirectories</div>
+          {/if}
+        {/if}
+      </div>
+
+      <button class="select-btn" onclick={selectDir} disabled={saving}>
+        {saving ? 'Saving...' : `Use "${currentPath.split('/').pop() || currentPath}"`}
+      </button>
+    </div>
+  {/if}
+
+  <div class="section-divider"></div>
+
+  <!-- Marked for Deletion -->
   {#if onOpenDeleted}
-    <div class="section-divider"></div>
-    <button class="deleted-btn" onclick={onOpenDeleted}>
+    <button class="settings-item" onclick={onOpenDeleted}>
       <Trash2 size={20} />
-      <span>Marked for Deletion</span>
+      <div class="item-content">
+        <span class="item-label">Marked for Deletion</span>
+        <span class="item-value">{deletedCount} file{deletedCount !== 1 ? 's' : ''}</span>
+      </div>
       {#if deletedCount > 0}
-        <span class="deleted-count">{deletedCount}</span>
+        <span class="badge">{deletedCount}</span>
       {/if}
     </button>
   {/if}
 
+  <!-- Connected Device -->
   {#if onDisconnect && connectedDevice}
     <div class="section-divider"></div>
-    <div class="device-section">
-      <div class="device-info">
-        <Speaker size={20} />
-        <span>{connectedDevice}</span>
+    <div class="settings-item device-item">
+      <Speaker size={20} />
+      <div class="item-content">
+        <span class="item-label">Connected Device</span>
+        <span class="item-value">{connectedDevice}</span>
       </div>
       <button class="disconnect-btn" onclick={disconnect}>
-        <Unplug size={16} />
+        <Unplug size={14} />
         <span>Disconnect</span>
       </button>
     </div>
@@ -179,63 +212,111 @@
     flex-direction: column;
     height: 100%;
     padding: 1rem;
-  }
-
-  .settings-header {
-    margin-bottom: 1rem;
-  }
-
-  .settings-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .settings-header h2 {
-    font-size: 1.3rem;
-    margin: 0;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f0f0f0;
-  }
-
-  .current-path {
-    font-size: 0.8rem;
-    color: #888;
-    margin: 0.25rem 0 0;
-    word-break: break-all;
-  }
-
-  .dir-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
     gap: 2px;
+    overflow-y: auto;
   }
 
-  .dir-item {
+  .settings-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     background: #1a1a1a;
     border: none;
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    padding: 1rem;
     color: #f0f0f0;
     font-size: 1rem;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+  }
+
+  .settings-item:hover {
+    background: #222;
+  }
+
+  .device-item {
+    cursor: default;
+  }
+
+  .device-item:hover {
+    background: #1a1a1a;
+  }
+
+  .item-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .item-label {
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .item-value {
+    font-size: 0.75rem;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .badge {
+    background: #ff4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    min-width: 1.5rem;
+    text-align: center;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: #222;
+    margin: 0.75rem 0;
+  }
+
+  /* Browser section */
+  .browser {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: #111;
+    border-radius: 0 0 12px 12px;
+    margin-top: -2px;
+  }
+
+  .browser-path {
+    font-size: 0.75rem;
+    color: #888;
+    word-break: break-all;
+    padding: 0 0.5rem;
+  }
+
+  .dir-list {
+    max-height: 250px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .dir-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: #1a1a1a;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    color: #f0f0f0;
+    font-size: 0.9rem;
     cursor: pointer;
     text-align: left;
   }
@@ -244,19 +325,20 @@
     background: #252525;
   }
 
-  .dir-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-
   .dir-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .actions {
-    padding-top: 1rem;
+  .shortcuts {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .shortcut {
+    border-left: 3px solid #1db954;
   }
 
   .select-btn {
@@ -264,9 +346,9 @@
     background: #1db954;
     border: none;
     color: white;
-    padding: 1rem;
-    border-radius: 12px;
-    font-size: 1rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
   }
@@ -278,92 +360,6 @@
   .select-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .shortcuts {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-bottom: 0.5rem;
-  }
-
-  .shortcut {
-    border-left: 3px solid #1db954;
-  }
-
-  .section-label {
-    font-size: 0.75rem;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0.5rem 0 0.25rem;
-  }
-
-  .loading, .empty, .error {
-    text-align: center;
-    padding: 2rem;
-    color: #888;
-  }
-
-  .error {
-    color: #ff6b6b;
-    padding: 0.5rem;
-  }
-
-  .section-divider {
-    height: 1px;
-    background: #222;
-    margin: 1rem 0;
-  }
-
-  .deleted-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 1rem;
-    color: #f0f0f0;
-    font-size: 1rem;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-  }
-
-  .deleted-btn:hover {
-    border-color: #ff4444;
-    background: #1e1e1e;
-  }
-
-  .deleted-count {
-    margin-left: auto;
-    background: #ff4444;
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.15rem 0.5rem;
-    border-radius: 10px;
-    min-width: 1.5rem;
-    text-align: center;
-  }
-
-  .device-section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
-  }
-
-  .device-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: #f0f0f0;
-    font-size: 0.95rem;
   }
 
   .disconnect-btn {
@@ -378,9 +374,24 @@
     padding: 0.4rem 0.8rem;
     border-radius: 16px;
     font-weight: 600;
+    flex-shrink: 0;
   }
 
   .disconnect-btn:hover {
     background: #444;
+  }
+
+  .loading, .empty {
+    text-align: center;
+    padding: 1rem;
+    color: #888;
+    font-size: 0.85rem;
+  }
+
+  .error {
+    color: #ff6b6b;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    text-align: center;
   }
 </style>
