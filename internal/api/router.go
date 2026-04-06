@@ -72,6 +72,11 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		r.Post("/config/music-dir", api.SetMusicDir)
 		r.Get("/browse/shortcuts", api.BrowseShortcuts)
 		r.Get("/browse", api.BrowseFilesystem)
+
+		// Deleted tracks management
+		r.Get("/deleted", api.ListDeleted)
+		r.Post("/deleted/restore", api.RestoreDeleted)
+		r.Post("/deleted/purge", api.PurgeDeleted)
 	})
 
 	// WebSocket
