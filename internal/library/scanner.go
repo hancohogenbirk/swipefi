@@ -203,18 +203,18 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 	// Flush remaining batch
 	flushBatch()
 
-	sc.mu.Lock()
-	sc.status.Scanning = false
-	sc.status.Scanned = count
-	sc.initialScan = false
-	sc.mu.Unlock()
-
 	if err != nil {
+		sc.mu.Lock()
+		sc.status.Scanning = false
+		sc.initialScan = false
+		sc.mu.Unlock()
 		return count, err
 	}
 
 	// Handle tracks whose files no longer exist on disk
 	// Skip if walk found no files (likely mount not ready)
+	// NOTE: keep Scanning=true until cleanup is done — the purge/soft-delete
+	// phase modifies the DB and track counts change during this time.
 	shouldPurge := len(purgeOrphans) > 0 && purgeOrphans[0]
 	var orphaned int
 	if count > 0 {
@@ -243,6 +243,13 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 			}
 		}
 	}
+
+	// Only mark scan as done AFTER cleanup is complete
+	sc.mu.Lock()
+	sc.status.Scanning = false
+	sc.status.Scanned = count
+	sc.initialScan = false
+	sc.mu.Unlock()
 
 	slog.Info("library scan complete", "tracks_found", count, "orphaned", orphaned)
 	return count, nil
