@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sort"
 	"sync"
 
 	"github.com/huin/goupnp/dcps/av1"
@@ -79,6 +80,9 @@ func (d *Discovery) ListDevices() []Device {
 	for _, r := range d.renderers {
 		devices = append(devices, r.Device)
 	}
+	sort.Slice(devices, func(i, j int) bool {
+		return devices[i].Name < devices[j].Name
+	})
 	return devices
 }
 

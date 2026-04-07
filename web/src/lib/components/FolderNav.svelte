@@ -4,10 +4,11 @@
   import { updateState } from '../stores/player.svelte';
   import { Folder as FolderIcon, ArrowUp, Play, Music } from 'lucide-svelte';
 
-  let { onNavigateToPlayer, onFolderNavigate, goBackSignal = 0 }: {
+  let { onNavigateToPlayer, onFolderNavigate, goBackSignal = 0, refreshSignal = 0 }: {
     onNavigateToPlayer: () => void;
     onFolderNavigate?: (path: string) => void;
     goBackSignal?: number;
+    refreshSignal?: number;
   } = $props();
 
   let currentPath = $state('');
@@ -79,6 +80,15 @@
     if (goBackSignal > lastBackSignal) {
       lastBackSignal = goBackSignal;
       navigateUp();
+    }
+  });
+
+  // React to refresh signal from App (e.g., scan complete)
+  let lastRefreshSignal = $state(0);
+  $effect(() => {
+    if (refreshSignal > lastRefreshSignal) {
+      lastRefreshSignal = refreshSignal;
+      loadFolders(currentPath);
     }
   });
 

@@ -35,6 +35,7 @@
   // --- History API for back button ---
   let folderHistory = $state<string[]>([]);
   let folderGoBackSignal = $state(0);
+  let folderRefreshSignal = $state(0);
 
   function pushFolderHistory(path: string) {
     folderHistory = [...folderHistory, path];
@@ -128,9 +129,14 @@
 
   async function pollScanOnce() {
     try {
+      const prev = scanProgress.scanning;
       scanProgress = await api.scanStatus();
       if (!scanProgress.scanning) {
         stopScanPolling();
+        // Refresh folders when scan finishes
+        if (prev) {
+          folderRefreshSignal++;
+        }
       }
     } catch { /* ignore */ }
   }
@@ -278,6 +284,7 @@
           onNavigateToPlayer={() => activeTab = 'player'}
           onFolderNavigate={pushFolderHistory}
           goBackSignal={folderGoBackSignal}
+          refreshSignal={folderRefreshSignal}
         />
       </div>
 
