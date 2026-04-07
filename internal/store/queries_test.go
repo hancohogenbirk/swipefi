@@ -579,19 +579,7 @@ func TestPurgeMissingTracks(t *testing.T) {
 	s := setupTestStore(t)
 	ctx := context.Background()
 
-	dir := t.TempDir()
-	newMusicDir := filepath.Join(dir, "new")
-	if err := os.MkdirAll(filepath.Join(newMusicDir, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a real file that exists in the new dir
-	realFile := filepath.Join(newMusicDir, "sub", "new.flac")
-	if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Insert tracks: one matching new dir, one from old dir
+	// Insert tracks: one that will be in the "existing" set, one that won't
 	if err := s.UpsertTrack(ctx, newTrack("sub/new.flac", "New", "", "")); err != nil {
 		t.Fatal(err)
 	}
@@ -608,7 +596,7 @@ func TestPurgeMissingTracks(t *testing.T) {
 	}
 
 	existing := map[string]bool{"sub/new.flac": true}
-	purged, err := s.PurgeMissingTracks(ctx, existing, newMusicDir)
+	purged, err := s.PurgeMissingTracks(ctx, existing)
 	if err != nil {
 		t.Fatal(err)
 	}

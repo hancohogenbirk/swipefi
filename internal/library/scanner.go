@@ -13,9 +13,10 @@ import (
 )
 
 type ScanStatus struct {
-	Scanning bool `json:"scanning"`
-	Scanned  int  `json:"scanned"`
-	Total    int  `json:"total"` // estimated from previous scan or directory walk
+	Scanning bool   `json:"scanning"`
+	Scanned  int    `json:"scanned"`
+	Total    int    `json:"total"`
+	Phase    string `json:"phase,omitempty"` // "counting", "scanning", "cleanup"
 }
 
 type Scanner struct {
@@ -67,6 +68,7 @@ func (sc *Scanner) MarkScanning() {
 	sc.status.Scanning = true
 	sc.status.Scanned = 0
 	sc.status.Total = 0
+	sc.status.Phase = "counting"
 }
 
 func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (int, error) {
@@ -109,7 +111,7 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 	})
 
 	sc.mu.Lock()
-	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total}
+	sc.status = ScanStatus{Scanning: true, Scanned: 0, Total: total, Phase: "scanning"}
 	sc.mu.Unlock()
 	slog.Info("scan: counted files", "total", total)
 
@@ -218,10 +220,13 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 	shouldPurge := len(purgeOrphans) > 0 && purgeOrphans[0]
 	var orphaned int
 	if count > 0 {
+		sc.mu.Lock()
+		sc.status.Phase = "cleanup"
+		sc.mu.Unlock()
 		if shouldPurge {
 			// Music dir changed — hard-delete old tracks (don't pollute deletion UI)
 			var purgeErr error
-			orphaned, purgeErr = sc.store.PurgeMissingTracks(scanCtx, existingPaths, musicDir)
+			orphaned, purgeErr = sc.store.PurgeMissingTracks(scanCtx, existingPaths)
 			if purgeErr != nil {
 				slog.Warn("purge orphaned tracks failed", "err", purgeErr)
 			} else if orphaned > 0 {

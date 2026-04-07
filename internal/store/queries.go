@@ -78,17 +78,29 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 		return 0, nil, err
 	}
 
-	for _, id := range toDelete {
-		s.db.ExecContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?", id)
+	if len(toDelete) > 0 {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return 0, nil, fmt.Errorf("begin tx: %w", err)
+		}
+		defer tx.Rollback()
+
+		stmt, _ := tx.PrepareContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?")
+		defer stmt.Close()
+		for _, id := range toDelete {
+			stmt.ExecContext(ctx, id)
+		}
+		tx.Commit()
 	}
 
 	return len(toDelete), deletedPaths, nil
 }
 
-// PurgeMissingTracks hard-deletes tracks whose files no longer exist.
+// PurgeMissingTracks hard-deletes tracks not found in the current scan.
 // Used when switching music directories — orphaned tracks from the old dir
 // should be removed entirely, not soft-deleted into the deletion UI.
-func (s *Store) PurgeMissingTracks(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, error) {
+// No os.Stat check needed: existingPaths is authoritative for the new dir.
+func (s *Store) PurgeMissingTracks(ctx context.Context, existingPaths map[string]bool) (int, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
 	if err != nil {
 		return 0, fmt.Errorf("query tracks: %w", err)
@@ -102,21 +114,37 @@ func (s *Store) PurgeMissingTracks(ctx context.Context, existingPaths map[string
 		if err := rows.Scan(&id, &path); err != nil {
 			return 0, fmt.Errorf("scan: %w", err)
 		}
-		if existingPaths[path] {
-			continue
+		if !existingPaths[path] {
+			toPurge = append(toPurge, id)
 		}
-		fullPath := filepath.Join(musicDir, filepath.FromSlash(path))
-		if _, err := os.Stat(fullPath); err == nil {
-			continue
-		}
-		toPurge = append(toPurge, id)
 	}
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
 
+	if len(toPurge) == 0 {
+		return 0, nil
+	}
+
+	// Batch delete in a single transaction
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, "DELETE FROM tracks WHERE id = ?")
+	if err != nil {
+		return 0, fmt.Errorf("prepare: %w", err)
+	}
+	defer stmt.Close()
+
 	for _, id := range toPurge {
-		s.db.ExecContext(ctx, "DELETE FROM tracks WHERE id = ?", id)
+		stmt.ExecContext(ctx, id)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
 	}
 
 	return len(toPurge), nil

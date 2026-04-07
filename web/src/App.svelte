@@ -29,7 +29,7 @@
   let error = $state('');
 
   let playerState = $derived(getPlayerState());
-  let scanProgress = $state({ scanning: false, scanned: 0, total: 0 });
+  let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '' });
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // --- History API for back button ---
@@ -51,6 +51,12 @@
     // Queue sub-view: go back to now playing
     if (showQueue) {
       showQueue = false;
+      return;
+    }
+
+    // Deleted manager sub-view: go back to settings
+    if (showDeletedManager) {
+      showDeletedManager = false;
       return;
     }
 
@@ -251,10 +257,14 @@
     {#if scanProgress.scanning}
       <div class="scan-banner">
         <div class="scan-bar">
-          <div class="scan-fill" style="width: {scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
+          <div class="scan-fill" style="width: {scanProgress.phase === 'cleanup' ? 100 : scanProgress.total ? Math.round((scanProgress.scanned / scanProgress.total) * 100) : 0}%"></div>
         </div>
         <span class="scan-banner-text">
-          {#if scanProgress.total > 0}
+          {#if scanProgress.phase === 'cleanup'}
+            Updating library...
+          {:else if scanProgress.phase === 'counting'}
+            Counting files...
+          {:else if scanProgress.total > 0}
             Scanning: {scanProgress.scanned} / {scanProgress.total}
           {:else}
             Scanning library...
@@ -283,7 +293,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} />
+          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} />
         {/if}
       </div>
     </div>
