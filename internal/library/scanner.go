@@ -58,6 +58,17 @@ func (sc *Scanner) IsInitialScan() bool {
 	return sc.status.Scanning && sc.initialScan
 }
 
+// MarkScanning sets the scan status to scanning immediately.
+// Call before starting the scan goroutine so the frontend sees scanning=true
+// on the first poll (avoids race between goroutine start and status check).
+func (sc *Scanner) MarkScanning() {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.status.Scanning = true
+	sc.status.Scanned = 0
+	sc.status.Total = 0
+}
+
 func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (int, error) {
 	sc.mu.Lock()
 	if sc.scanCancel != nil {

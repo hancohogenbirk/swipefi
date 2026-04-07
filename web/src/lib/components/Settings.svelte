@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false, scanning = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean; scanning?: boolean } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -112,18 +112,13 @@
     }
   }
 
-  let rescanning = $state(false);
-
   async function rescanLibrary() {
-    rescanning = true;
     error = '';
     try {
       await api.rescanLibrary();
       onDone();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Rescan failed';
-    } finally {
-      rescanning = false;
     }
   }
 
@@ -190,17 +185,17 @@
         {/if}
       </div>
 
-      <button class="select-btn" onclick={selectDir} disabled={saving || currentPath === musicDir}>
-        {saving ? 'Saving...' : currentPath === musicDir ? 'Already selected' : `Use "${currentPath.split('/').pop() || currentPath}"`}
+      <button class="select-btn" onclick={selectDir} disabled={saving || scanning || currentPath === musicDir}>
+        {saving ? 'Saving...' : scanning ? 'Scanning...' : currentPath === musicDir ? 'Already selected' : `Use "${currentPath.split('/').pop() || currentPath}"`}
       </button>
     </div>
   {/if}
 
   {#if musicDir && !browseOpen}
-    <button class="settings-item rescan-item" onclick={rescanLibrary} disabled={rescanning}>
+    <button class="settings-item rescan-item" onclick={rescanLibrary} disabled={scanning}>
       <RefreshCw size={20} />
       <div class="item-content">
-        <span class="item-label">{rescanning ? 'Rescanning...' : 'Rescan Library'}</span>
+        <span class="item-label">{scanning ? 'Rescanning...' : 'Rescan Library'}</span>
         <span class="item-value">Force re-read all metadata</span>
       </div>
     </button>

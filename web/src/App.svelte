@@ -277,7 +277,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} />
+          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} />
         {/if}
       </div>
     </div>

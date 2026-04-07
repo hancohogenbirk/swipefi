@@ -98,6 +98,7 @@ func run() error {
 
 		// Trigger a rescan in background (play counts preserved via UpsertTrack)
 		// purgeOrphans=true: hard-delete old dir tracks instead of soft-deleting
+		scanner.MarkScanning()
 		go func() {
 			count, err := scanner.Scan(ctx, false, true)
 			if err != nil {

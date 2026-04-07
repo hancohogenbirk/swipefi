@@ -121,6 +121,7 @@ func (a *API) RescanLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.scanner.MarkScanning()
 	go func() {
 		count, err := a.scanner.Scan(context.Background(), true)
 		if err != nil {
