@@ -1,5 +1,7 @@
 import { api, type PlayerState } from '../api/client';
 
+const WS_RECONNECT_DELAY_MS = 2000;
+
 let state = $state<PlayerState>({
   state: 'idle',
   position_ms: 0,
@@ -40,7 +42,7 @@ export function connectWebSocket() {
     reconnectTimer = setTimeout(async () => {
       connectWebSocket();
       await loadInitialState();
-    }, 2000);
+    }, WS_RECONNECT_DELAY_MS);
   };
 
   ws.onerror = () => {

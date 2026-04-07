@@ -38,10 +38,10 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: none;
     border-top: 1px solid #333;
-    color: #f0f0f0;
+    color: var(--color-text);
     padding: 0.6rem 1rem;
     cursor: pointer;
     width: 100%;
@@ -76,14 +76,14 @@
 
   .mini-artist {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .mini-state {
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   .mini-progress-track {

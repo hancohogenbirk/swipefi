@@ -127,8 +127,8 @@ func TestCleanupEmptyDirs(t *testing.T) {
 		}
 
 		// Create Synology @eaDir and macOS .DS_Store
-		os.MkdirAll(filepath.Join(dir, SynologyEADir), 0o755)
-		os.WriteFile(filepath.Join(dir, MacDSStore), []byte("data"), 0o644)
+		os.MkdirAll(filepath.Join(dir, "@eaDir"), 0o755)
+		os.WriteFile(filepath.Join(dir, ".DS_Store"), []byte("data"), 0o644)
 
 		CleanupEmptyDirs(dir, root)
 
@@ -152,7 +152,7 @@ func TestCleanupEmptyDirs(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		os.MkdirAll(filepath.Join(dir, SynologyEADir), 0o755)
+		os.MkdirAll(filepath.Join(dir, "@eaDir"), 0o755)
 		os.WriteFile(filepath.Join(dir, "song.flac"), []byte("audio"), 0o644)
 
 		CleanupEmptyDirs(dir, root)

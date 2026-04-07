@@ -10,11 +10,15 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
-}
+const (
+	coverArtFetchTimeout = 10 * time.Second
+	mbMinConfidenceScore = 80
+	userAgent            = "SwipeFi/1.0 (https://github.com/hancohogenbirk/swipefi)"
+)
 
-const userAgent = "SwipeFi/1.0 (https://github.com/hancohogenbirk/swipefi)"
+var httpClient = &http.Client{
+	Timeout: coverArtFetchTimeout,
+}
 
 // FetchCoverArt searches MusicBrainz for the artist+album and fetches cover art
 // from the Cover Art Archive. Returns nil if not found.
@@ -79,7 +83,7 @@ func searchMusicBrainz(artist, album string) (string, error) {
 		return "", err
 	}
 
-	if len(result.Releases) == 0 || result.Releases[0].Score < 80 {
+	if len(result.Releases) == 0 || result.Releases[0].Score < mbMinConfidenceScore {
 		return "", nil // no good match
 	}
 

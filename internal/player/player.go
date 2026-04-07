@@ -24,6 +24,11 @@ const (
 	StatePaused  State = "paused"
 )
 
+const (
+	playCountThresholdMs = 60_000
+	dlnaRetryDelay       = 500 * time.Millisecond
+)
+
 // PlayerState is the full state broadcast to WebSocket clients.
 type PlayerState struct {
 	State         State        `json:"state"`
@@ -229,7 +234,7 @@ func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL, metadata strin
 		}
 		if attempt == 0 {
 			slog.Warn("play failed, retrying", "err", err, "attempt", attempt+1)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(dlnaRetryDelay)
 			continue
 		}
 		return fmt.Errorf("play: %w", err)
@@ -478,7 +483,7 @@ func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
 		if p.state == StatePlaying {
 			total += time.Since(p.playStartTime).Milliseconds()
 		}
-		shouldCount = total >= 60_000
+		shouldCount = total >= playCountThresholdMs
 	}
 
 	if shouldCount {

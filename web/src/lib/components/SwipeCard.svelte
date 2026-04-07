@@ -189,16 +189,16 @@
 
   .swipe-overlay.keep {
     right: 0.75rem;
-    color: #4ec484;
-    border: 4px solid #4ec484;
+    color: var(--color-accent);
+    border: 4px solid var(--color-accent);
     background: rgba(78, 196, 132, 0.1);
     transform: rotate(12deg);
   }
 
   .swipe-overlay.reject {
     left: 0.75rem;
-    color: #ff4444;
-    border: 4px solid #ff4444;
+    color: var(--color-danger);
+    border: 4px solid var(--color-danger);
     background: rgba(255, 68, 68, 0.1);
     transform: rotate(-12deg);
   }
@@ -209,7 +209,7 @@
     position: relative;
     border-radius: 12px;
     overflow: hidden;
-    background: #222;
+    background: var(--color-bg-hover);
     flex-shrink: 0;
   }
 

@@ -200,7 +200,7 @@
   .crumb {
     background: none;
     border: none;
-    color: #7cb3ff;
+    color: var(--color-secondary);
     font-size: 0.9rem;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
@@ -224,8 +224,8 @@
   }
 
   .sort-select {
-    background: #222;
-    color: #f0f0f0;
+    background: var(--color-bg-hover);
+    color: var(--color-text);
     border: 1px solid #444;
     border-radius: 8px;
     padding: 0.5rem;
@@ -262,11 +262,11 @@
   .folder-item {
     display: flex;
     align-items: center;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: none;
     border-radius: 8px;
     padding: 0.75rem 1rem;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 1rem;
     cursor: pointer;
     text-align: left;
@@ -283,7 +283,7 @@
     gap: 0.75rem;
     background: none;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 1rem;
     cursor: pointer;
     flex: 1;
@@ -303,7 +303,7 @@
   }
 
   .play-btn {
-    background: #1db954;
+    background: var(--color-primary);
     border: none;
     color: white;
     width: 36px;
@@ -318,7 +318,7 @@
   }
 
   .play-btn:hover {
-    background: #1ed760;
+    background: var(--color-primary-hover);
   }
 
   .track-item {
@@ -354,10 +354,10 @@
   .loading, .empty, .error {
     text-align: center;
     padding: 2rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .error {
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
   }
 </style>

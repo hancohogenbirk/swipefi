@@ -250,11 +250,11 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: none;
     border-radius: 12px;
     padding: 1rem;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 1rem;
     cursor: pointer;
     text-align: left;
@@ -262,7 +262,7 @@
   }
 
   .settings-item:hover {
-    background: #222;
+    background: var(--color-bg-hover);
   }
 
   .device-item {
@@ -270,7 +270,7 @@
   }
 
   .device-item:hover {
-    background: #1a1a1a;
+    background: var(--color-bg-card);
   }
 
   .item-content {
@@ -288,14 +288,14 @@
 
   .item-value {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .badge {
-    background: #ff4444;
+    background: var(--color-danger);
     color: white;
     font-size: 0.7rem;
     font-weight: 700;
@@ -307,7 +307,7 @@
 
   .section-divider {
     height: 1px;
-    background: #222;
+    background: var(--color-bg-hover);
     margin: 0.75rem 0;
   }
 
@@ -317,14 +317,14 @@
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.5rem;
-    background: #111;
+    background: var(--color-bg);
     border-radius: 0 0 12px 12px;
     margin-top: -2px;
   }
 
   .browser-path {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--color-text-secondary);
     word-break: break-all;
     padding: 0 0.5rem;
   }
@@ -341,11 +341,11 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: none;
     border-radius: 6px;
     padding: 0.6rem 0.75rem;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 0.9rem;
     cursor: pointer;
     text-align: left;
@@ -368,12 +368,12 @@
   }
 
   .shortcut {
-    border-left: 3px solid #7cb3ff;
+    border-left: 3px solid var(--color-secondary);
   }
 
   .select-btn {
     width: 100%;
-    background: #7cb3ff;
+    background: var(--color-secondary);
     border: none;
     color: white;
     padding: 0.75rem;
@@ -384,7 +384,7 @@
   }
 
   .select-btn:hover {
-    background: #94c1ff;
+    background: var(--color-secondary-hover);
   }
 
   .select-btn:disabled {
@@ -398,7 +398,7 @@
     gap: 0.3rem;
     background: #333;
     border: none;
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
     cursor: pointer;
     font-size: 0.8rem;
     padding: 0.4rem 0.8rem;
@@ -415,7 +415,7 @@
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    background: #7cb3ff;
+    background: var(--color-secondary);
     border: none;
     color: white;
     cursor: pointer;
@@ -427,18 +427,18 @@
   }
 
   .select-device-btn:hover {
-    background: #94c1ff;
+    background: var(--color-secondary-hover);
   }
 
   .loading, .empty {
     text-align: center;
     padding: 1rem;
-    color: #888;
+    color: var(--color-text-secondary);
     font-size: 0.85rem;
   }
 
   .error {
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
     font-size: 0.85rem;
     padding: 0.5rem;
     text-align: center;

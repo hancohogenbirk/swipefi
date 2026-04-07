@@ -20,11 +20,12 @@ type API struct {
 	player            *player.Player
 	discovery         *dlna.Discovery
 	hub               *Hub
+	dataDir           string
 	onMusicDirChanged func(musicDir, deleteDir string)
 }
 
-func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, hub *Hub) *API {
-	return &API{store: s, scanner: scanner, player: p, discovery: d, hub: hub}
+func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, hub *Hub, dataDir string) *API {
+	return &API{store: s, scanner: scanner, player: p, discovery: d, hub: hub, dataDir: dataDir}
 }
 
 func (a *API) SetOnMusicDirChanged(fn func(musicDir, deleteDir string)) {

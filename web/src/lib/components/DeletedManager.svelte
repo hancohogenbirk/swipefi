@@ -188,13 +188,13 @@
 
   .count {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .back-btn {
     background: none;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 50%;
@@ -213,7 +213,7 @@
     gap: 0.4rem;
     background: none;
     border: none;
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-size: 0.8rem;
     padding: 0.4rem 0.6rem;
@@ -221,7 +221,7 @@
   }
 
   .select-all-btn:hover {
-    color: #f0f0f0;
+    color: var(--color-text);
     background: rgba(255, 255, 255, 0.1);
   }
 
@@ -229,7 +229,7 @@
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    background: #7cb3ff;
+    background: var(--color-secondary);
     border: none;
     color: white;
     cursor: pointer;
@@ -244,7 +244,7 @@
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    background: #ff4444;
+    background: var(--color-danger);
     border: none;
     color: white;
     cursor: pointer;
@@ -284,7 +284,7 @@
     width: 24px;
     height: 24px;
     border: 3px solid #333;
-    border-top-color: #7cb3ff;
+    border-top-color: var(--color-secondary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -310,17 +310,17 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: none;
     border-radius: 8px;
     padding: 0.7rem 0.75rem;
-    color: #f0f0f0;
+    color: var(--color-text);
     cursor: pointer;
     text-align: left;
   }
 
   .track-item:hover {
-    background: #222;
+    background: var(--color-bg-hover);
   }
 
   .track-item.selected {
@@ -334,7 +334,7 @@
   }
 
   .track-item.selected .checkbox {
-    color: #7cb3ff;
+    color: var(--color-secondary);
   }
 
   .track-details {
@@ -384,7 +384,7 @@
   }
 
   .confirm-warning {
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
     font-size: 0.85rem !important;
     margin-bottom: 1.25rem !important;
   }
@@ -398,7 +398,7 @@
   .confirm-cancel {
     background: #333;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     padding: 0.6rem 1.5rem;
     border-radius: 24px;
     font-size: 0.95rem;
@@ -406,7 +406,7 @@
   }
 
   .confirm-delete {
-    background: #ff4444;
+    background: var(--color-danger);
     border: none;
     color: white;
     padding: 0.6rem 1.5rem;
@@ -419,11 +419,11 @@
   .loading, .empty, .error {
     text-align: center;
     padding: 2rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .error {
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
     padding: 0.5rem;
   }
 </style>

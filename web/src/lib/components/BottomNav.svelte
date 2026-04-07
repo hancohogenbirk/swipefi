@@ -51,7 +51,7 @@
     align-items: center;
     padding: 0.4rem 0 0.5rem;
     background: #0d0d0d;
-    border-top: 1px solid #222;
+    border-top: 1px solid var(--color-bg-hover);
     flex-shrink: 0;
   }
 
@@ -75,7 +75,7 @@
   }
 
   .nav-tab:hover:not(.active) {
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .nav-label {

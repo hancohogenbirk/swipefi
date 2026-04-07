@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"swipefi/internal/dlna"
+	"swipefi/internal/store"
 )
 
 func (a *API) ListDevices(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,7 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 	a.player.SetTransport(transport)
 
 	// Persist selected device for auto-reconnect
-	if err := a.store.SetConfig("selected_device_udn", req.UDN); err != nil {
+	if err := a.store.SetConfig(store.ConfigKeyDeviceUDN, req.UDN); err != nil {
 		slog.Warn("failed to persist selected device", "err", err)
 	}
 
@@ -48,7 +49,7 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) DisconnectDevice(w http.ResponseWriter, r *http.Request) {
 	a.player.Disconnect(r.Context())
-	a.store.SetConfig("selected_device_udn", "")
+	a.store.SetConfig(store.ConfigKeyDeviceUDN, "")
 	slog.Info("device disconnected")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

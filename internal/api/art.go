@@ -15,6 +15,11 @@ import (
 	"swipefi/internal/store"
 )
 
+const (
+	artCacheSubdir = "art"
+	artCacheMaxAge = 86400 // 24 hours in seconds
+)
+
 func (a *API) GetTrackArt(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -39,17 +44,13 @@ func (a *API) GetTrackArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dataDir := os.Getenv("SWIPEFI_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "./data"
-	}
-	cacheDir := filepath.Join(dataDir, "art")
+	cacheDir := filepath.Join(a.dataDir, artCacheSubdir)
 
 	// Check cache first
 	cached, mime, err := readCachedArt(cacheDir, id)
 	if err == nil && cached != nil {
 		w.Header().Set("Content-Type", mime)
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", artCacheMaxAge))
 		w.Write(cached)
 		return
 	}

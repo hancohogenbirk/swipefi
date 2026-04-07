@@ -5,6 +5,11 @@ import (
 	"fmt"
 )
 
+const (
+	ConfigKeyMusicDir  = "music_dir"
+	ConfigKeyDeviceUDN = "selected_device_udn"
+)
+
 func (s *Store) migrateConfig() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS config (

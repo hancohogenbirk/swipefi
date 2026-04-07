@@ -15,11 +15,12 @@ import (
 // DeleteDirName is the folder name used for rejected tracks (relative to music dir).
 const DeleteDirName = "to_delete"
 
-// System/NAS directory names that should be skipped during scanning and browsing.
-const (
-	SynologyEADir     = "@eaDir"
-	SynologyRecycleBin = "#recycle"
-)
+// skippedDirs are directories excluded from scanning, browsing, and cleanup.
+var skippedDirs = map[string]bool{
+	DeleteDirName: true,
+	"@eaDir":      true, // Synology extended attributes
+	"#recycle":    true, // Synology recycle bin
+}
 
 // DeleteDir returns the full path to the delete directory for a given music dir.
 func DeleteDir(musicDir string) string {
@@ -29,10 +30,10 @@ func DeleteDir(musicDir string) string {
 // IsSkippedDir returns true if the directory name should be skipped during
 // scanning, browsing, and cleanup (system dirs, hidden dirs, delete dir).
 func IsSkippedDir(name string) bool {
-	return name == DeleteDirName ||
-		name == SynologyEADir ||
-		name == SynologyRecycleBin ||
-		strings.HasPrefix(name, "@") ||
+	if skippedDirs[name] {
+		return true
+	}
+	return strings.HasPrefix(name, "@") ||
 		strings.HasPrefix(name, ".")
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"swipefi/internal/library"
+	"swipefi/internal/store"
 )
 
 type DirEntry struct {
@@ -143,7 +144,7 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Look up the connected device name from the saved UDN
 	var connectedDevice string
-	savedUDN, _ := a.store.GetConfig("selected_device_udn")
+	savedUDN, _ := a.store.GetConfig(store.ConfigKeyDeviceUDN)
 	if savedUDN != "" {
 		if renderer, ok := a.discovery.GetRenderer(savedUDN); ok {
 			connectedDevice = renderer.Name
@@ -184,7 +185,7 @@ func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.SetConfig("music_dir", req.Path); err != nil {
+	if err := a.store.SetConfig(store.ConfigKeyMusicDir, req.Path); err != nil {
 		slog.Error("save music dir", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return

@@ -2,6 +2,8 @@
   import { api } from '../api/client';
   import { getPlayerState } from '../stores/player.svelte';
 
+  const SEEK_SYNC_TOLERANCE_MS = 3000;
+
   let seeking = $state(false);
   let seekValue = $state(0);
   let pendingSeekMs = $state<number | null>(null);
@@ -18,7 +20,7 @@
 
   // Clear pending seek when WS position catches up (within 3s tolerance)
   $effect(() => {
-    if (pendingSeekMs !== null && Math.abs(ps.position_ms - pendingSeekMs) < 3000) {
+    if (pendingSeekMs !== null && Math.abs(ps.position_ms - pendingSeekMs) < SEEK_SYNC_TOLERANCE_MS) {
       pendingSeekMs = null;
     }
   });

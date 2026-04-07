@@ -45,7 +45,7 @@ func (a *API) RestoreDeleted(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "music directory not configured")
 		return
 	}
-	deleteDir := filepath.Join(musicDir, "to_delete")
+	deleteDir := library.DeleteDir(musicDir)
 
 	restored := 0
 	var errors []string
@@ -144,13 +144,9 @@ func (a *API) PurgeDeleted(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "music directory not configured")
 		return
 	}
-	deleteDir := filepath.Join(musicDir, "to_delete")
+	deleteDir := library.DeleteDir(musicDir)
 
-	dataDir := os.Getenv("SWIPEFI_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "./data"
-	}
-	cacheDir := filepath.Join(dataDir, "art")
+	cacheDir := filepath.Join(a.dataDir, artCacheSubdir)
 
 	ids := req.IDs
 	if req.All {

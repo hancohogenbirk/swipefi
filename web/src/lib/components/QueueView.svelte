@@ -4,6 +4,10 @@
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { ArrowLeft, ChevronUp, ChevronDown, Play } from 'lucide-svelte';
 
+  const HOLD_DELAY_MS = 250;
+  const HAPTIC_DURATION_MS = 30;
+  const DRAG_JITTER_PX = 10;
+
   let { onBack }: { onBack: () => void } = $props();
 
   let tracks = $state<Track[]>([]);
@@ -101,8 +105,8 @@
       isDragging = true;
       dragIndex = idx;
       // Haptic feedback if available
-      if (navigator.vibrate) navigator.vibrate(30);
-    }, 250);
+      if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
+    }, HOLD_DELAY_MS);
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -110,7 +114,7 @@
     const dy = Math.abs(touch.clientY - touchStartY);
 
     // Cancel long-press if finger moved too much before hold triggered
-    if (!isDragging && dy > 10) {
+    if (!isDragging && dy > DRAG_JITTER_PX) {
       cancelHold();
       return;
     }
@@ -299,13 +303,13 @@
 
   .queue-count {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .back-btn {
     background: none;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 50%;
@@ -318,7 +322,7 @@
   .drag-hint {
     text-align: center;
     font-size: 0.75rem;
-    color: #4ec484;
+    color: var(--color-accent);
     padding: 0.4rem 0;
     font-weight: 600;
   }
@@ -345,7 +349,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border-radius: 10px;
     padding: 0.75rem;
     cursor: pointer;
@@ -355,7 +359,7 @@
   }
 
   .queue-item:hover {
-    background: #222;
+    background: var(--color-bg-hover);
   }
 
   .queue-item:active {
@@ -364,7 +368,7 @@
 
   .queue-item.current {
     background: #1a2e2a;
-    border-left: 3px solid #4ec484;
+    border-left: 3px solid var(--color-accent);
   }
 
   .queue-item.dragging {
@@ -386,7 +390,7 @@
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.05);
     font-size: 0.8rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .queue-item.current .track-indicator {
@@ -440,7 +444,7 @@
   }
 
   .move-btn:hover:not(:disabled) {
-    color: #f0f0f0;
+    color: var(--color-text);
     background: rgba(255, 255, 255, 0.1);
   }
 
@@ -452,6 +456,6 @@
   .loading, .empty {
     text-align: center;
     padding: 2rem;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 </style>

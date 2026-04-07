@@ -90,7 +90,7 @@
     gap: 0.4rem;
     background: none;
     border: none;
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 8px;
@@ -99,7 +99,7 @@
 
   .queue-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   .queue-count {

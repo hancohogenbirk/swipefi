@@ -27,9 +27,16 @@ func main() {
 	}
 }
 
+const (
+	defaultPort        = "8080"
+	defaultDataDir     = "./data"
+	dlnaDiscoveryDelay = 2 * time.Second
+	shutdownTimeout    = 5 * time.Second
+)
+
 func run() error {
-	port := envOr("SWIPEFI_PORT", "8080")
-	dataDir := envOr("SWIPEFI_DATA_DIR", "./data")
+	port := envOr("SWIPEFI_PORT", defaultPort)
+	dataDir := envOr("SWIPEFI_DATA_DIR", defaultDataDir)
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -50,7 +57,7 @@ func run() error {
 	// Determine music dir: env var overrides DB config
 	musicDir := os.Getenv("SWIPEFI_MUSIC_DIR")
 	if musicDir == "" {
-		musicDir, _ = s.GetConfig("music_dir")
+		musicDir, _ = s.GetConfig(store.ConfigKeyMusicDir)
 	}
 	var deleteDir string
 	if musicDir != "" {
@@ -87,7 +94,7 @@ func run() error {
 	})
 
 	// API and router
-	a := api.NewAPI(s, scanner, p, discovery, hub)
+	a := api.NewAPI(s, scanner, p, discovery, hub, dataDir)
 
 	// Handle music dir changes from the settings UI
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
@@ -137,14 +144,14 @@ func run() error {
 
 	// DLNA discovery + auto-reconnect to last device
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(dlnaDiscoveryDelay)
 		if err := discovery.Scan(ctx); err != nil {
 			slog.Error("initial discovery failed", "err", err)
 			return
 		}
 
 		// Try auto-reconnect to last selected device
-		savedUDN, _ := s.GetConfig("selected_device_udn")
+		savedUDN, _ := s.GetConfig(store.ConfigKeyDeviceUDN)
 		if savedUDN != "" {
 			if renderer, ok := discovery.GetRenderer(savedUDN); ok {
 				transport := dlna.NewTransport(renderer.Transport)
@@ -169,7 +176,7 @@ func run() error {
 		slog.Info("shutting down", "signal", sig)
 		cancel()
 
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
 		srv.Shutdown(shutdownCtx)
 	}()

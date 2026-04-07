@@ -3,6 +3,9 @@
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { SkipBack, RotateCcw, Play, Pause, RotateCw, SkipForward } from 'lucide-svelte';
 
+  const SKIP_SECONDS = 15;
+  const SKIP_MS = SKIP_SECONDS * 1000;
+
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing');
 
@@ -16,7 +19,7 @@
   }
 
   async function skipBack15() {
-    const pos = Math.max(0, ps.position_ms - 15000);
+    const pos = Math.max(0, ps.position_ms - SKIP_MS);
     try {
       await api.seek(pos);
     } catch {
@@ -26,7 +29,7 @@
 
   async function skipForward15() {
     try {
-      await api.seek(ps.position_ms + 15000);
+      await api.seek(ps.position_ms + SKIP_MS);
     } catch {
       // ignore
     }
@@ -91,7 +94,7 @@
   .transport-btn {
     background: none;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     cursor: pointer;
     padding: 0.6rem;
     border-radius: 50%;
@@ -120,9 +123,9 @@
   }
 
   .play-pause-btn {
-    background: #f0f0f0;
+    background: var(--color-text);
     border: none;
-    color: #111;
+    color: var(--color-bg);
     width: 72px;
     height: 72px;
     border-radius: 50%;

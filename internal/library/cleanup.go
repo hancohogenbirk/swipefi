@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 )
 
-// Additional file names (not dirs) that should not prevent a directory
-// from being considered "empty" during cleanup.
-const (
-	MacDSStore  = ".DS_Store"
-	WinThumbs   = "Thumbs.db"
-	WinDesktopIni = "desktop.ini"
-)
+// ignoredFiles are OS-generated files that don't count as "real content"
+// when deciding whether a directory is empty.
+var ignoredFiles = map[string]bool{
+	".DS_Store":   true, // macOS
+	"Thumbs.db":   true, // Windows
+	"desktop.ini": true, // Windows
+}
 
 func isIgnoredEntry(name string) bool {
 	// Reuse the directory skip list (covers @eaDir, #recycle, dot-prefixed, etc.)
@@ -19,7 +19,7 @@ func isIgnoredEntry(name string) bool {
 		return true
 	}
 	// Also ignore OS-generated files
-	return name == WinThumbs || name == WinDesktopIni
+	return ignoredFiles[name]
 }
 
 // CleanupEmptyDirs removes dir if effectively empty (only contains ignored entries),

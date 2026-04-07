@@ -10,18 +10,21 @@
   import BottomNav from './lib/components/BottomNav.svelte';
   import MiniPlayer from './lib/components/MiniPlayer.svelte';
 
+  const SCAN_POLL_INTERVAL_MS = 500;
+  const SESSION_KEY_TAB = 'swipefi-tab';
+
   type AppPhase = 'loading' | 'choose-dir' | 'setup' | 'main';
   type Tab = 'folders' | 'player' | 'settings';
 
   let appPhase = $state<AppPhase>('loading');
-  let savedTab = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('swipefi-tab') : null) as Tab | null;
+  let savedTab = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(SESSION_KEY_TAB) : null) as Tab | null;
   let activeTab = $state<Tab>(savedTab || 'folders');
   let showQueue = $state(false);
   let showDeletedManager = $state(false);
 
   // Persist active tab across refreshes
   $effect(() => {
-    sessionStorage.setItem('swipefi-tab', activeTab);
+    sessionStorage.setItem(SESSION_KEY_TAB, activeTab);
   });
 
   let devices = $state<Device[]>([]);
@@ -147,7 +150,7 @@
     scanProgress = { ...scanProgress, scanning: true };
     // Poll once immediately (no 500ms blind window), then every 500ms
     pollScanOnce();
-    scanPollTimer = setInterval(pollScanOnce, 500);
+    scanPollTimer = setInterval(pollScanOnce, SCAN_POLL_INTERVAL_MS);
   }
 
   function stopScanPolling() {
@@ -352,7 +355,7 @@
   }
 
   .subtitle {
-    color: #888;
+    color: var(--color-text-secondary);
     font-size: 1rem;
   }
 
@@ -379,7 +382,7 @@
   }
 
   .scan-text {
-    color: #888;
+    color: var(--color-text-secondary);
     font-size: 0.85rem;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -390,8 +393,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 1rem;
-    background: #1a1a1a;
-    border-bottom: 1px solid #222;
+    background: var(--color-bg-card);
+    border-bottom: 1px solid var(--color-bg-hover);
     flex-shrink: 0;
   }
 
@@ -401,13 +404,13 @@
 
   .scan-banner-text {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--color-text-secondary);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
   .error {
-    color: #ff6b6b;
+    color: var(--color-danger-hover);
     font-size: 0.9rem;
     text-align: center;
   }
@@ -421,9 +424,9 @@
   }
 
   .device-btn {
-    background: #1a1a1a;
+    background: var(--color-bg-card);
     border: 1px solid #333;
-    color: #f0f0f0;
+    color: var(--color-text);
     padding: 1rem;
     border-radius: 12px;
     font-size: 1rem;
@@ -431,14 +434,14 @@
   }
 
   .device-btn:hover {
-    border-color: #1db954;
+    border-color: var(--color-primary);
     background: #1e1e1e;
   }
 
   .scan-btn {
     background: none;
     border: 1px solid #444;
-    color: #888;
+    color: var(--color-text-secondary);
     padding: 0.75rem 1.5rem;
     border-radius: 24px;
     cursor: pointer;
@@ -503,7 +506,7 @@
   .exit-cancel {
     background: #333;
     border: none;
-    color: #f0f0f0;
+    color: var(--color-text);
     padding: 0.6rem 1.5rem;
     border-radius: 24px;
     font-size: 0.95rem;
@@ -511,7 +514,7 @@
   }
 
   .exit-leave {
-    background: #ff4444;
+    background: var(--color-danger);
     border: none;
     color: white;
     padding: 0.6rem 1.5rem;
