@@ -230,7 +230,7 @@
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    background: #1db954;
+    background: #7cb3ff;
     border: none;
     color: white;
     cursor: pointer;
@@ -285,7 +285,7 @@
     width: 24px;
     height: 24px;
     border: 3px solid #333;
-    border-top-color: #1db954;
+    border-top-color: #7cb3ff;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -325,7 +325,7 @@
   }
 
   .track-item.selected {
-    background: #1a2a1a;
+    background: #1a1a2a;
   }
 
   .checkbox {
@@ -335,7 +335,7 @@
   }
 
   .track-item.selected .checkbox {
-    color: #1db954;
+    color: #7cb3ff;
   }
 
   .track-details {

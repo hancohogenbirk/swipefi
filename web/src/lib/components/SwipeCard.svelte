@@ -189,9 +189,9 @@
 
   .swipe-overlay.keep {
     right: 0.75rem;
-    color: #1db954;
-    border: 4px solid #1db954;
-    background: rgba(29, 185, 84, 0.1);
+    color: #4ec484;
+    border: 4px solid #4ec484;
+    background: rgba(78, 196, 132, 0.1);
     transform: rotate(12deg);
   }
 

@@ -375,12 +375,12 @@
   }
 
   .shortcut {
-    border-left: 3px solid #1db954;
+    border-left: 3px solid #7cb3ff;
   }
 
   .select-btn {
     width: 100%;
-    background: #1db954;
+    background: #7cb3ff;
     border: none;
     color: white;
     padding: 0.75rem;
@@ -391,7 +391,7 @@
   }
 
   .select-btn:hover {
-    background: #1ed760;
+    background: #94c1ff;
   }
 
   .select-btn:disabled {

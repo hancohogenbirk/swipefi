@@ -4,11 +4,24 @@
 
   let seeking = $state(false);
   let seekValue = $state(0);
+  let pendingSeekMs = $state<number | null>(null);
 
   let ps = $derived(getPlayerState());
-  let positionMs = $derived(seeking ? seekValue : ps.position_ms);
+
+  let positionMs = $derived(
+    seeking ? seekValue :
+    pendingSeekMs !== null ? pendingSeekMs :
+    ps.position_ms
+  );
   let durationMs = $derived(ps.duration_ms || 1);
   let progress = $derived(Math.min((positionMs / durationMs) * 100, 100));
+
+  // Clear pending seek when WS position catches up (within 3s tolerance)
+  $effect(() => {
+    if (pendingSeekMs !== null && Math.abs(ps.position_ms - pendingSeekMs) < 3000) {
+      pendingSeekMs = null;
+    }
+  });
 
   function formatTime(ms: number): string {
     const totalSec = Math.floor(ms / 1000);
@@ -30,8 +43,10 @@
 
   async function handlePointerUp() {
     if (!seeking) return;
+    const target = seekValue;
     seeking = false;
-    await api.seek(seekValue);
+    pendingSeekMs = target;
+    await api.seek(target);
   }
 
   function updateSeekValue(e: PointerEvent) {

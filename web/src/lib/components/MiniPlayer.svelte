@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getPlayerState } from '../stores/player.svelte';
+  import { Play, Pause } from 'lucide-svelte';
 
   let { onClick }: { onClick: () => void } = $props();
 
@@ -19,8 +20,16 @@
       <span class="mini-title">{ps.track.title}</span>
       <span class="mini-artist">{ps.track.artist || 'Unknown'}</span>
     </div>
-    <span class="mini-state">{ps.state === 'playing' ? '▶' : '⏸'}</span>
-    <div class="mini-progress" style="width: {ps.duration_ms ? (ps.position_ms / ps.duration_ms * 100) : 0}%"></div>
+    <span class="mini-state">
+      {#if ps.state === 'playing'}
+        <Pause size={18} fill="currentColor" />
+      {:else}
+        <Play size={18} fill="currentColor" />
+      {/if}
+    </span>
+    <div class="mini-progress-track">
+      <div class="mini-progress" style="width: {ps.duration_ms ? (ps.position_ms / ps.duration_ms * 100) : 0}%"></div>
+    </div>
   </button>
 {/if}
 
@@ -71,16 +80,25 @@
   }
 
   .mini-state {
-    font-size: 1.2rem;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: #f0f0f0;
   }
 
-  .mini-progress {
+  .mini-progress-track {
     position: absolute;
     bottom: 0;
     left: 0;
+    right: 0;
     height: 2px;
-    background: #1db954;
+    background: transparent;
+  }
+
+  .mini-progress {
+    height: 100%;
+    background: linear-gradient(90deg, #1db954, #7cb3ff);
+    background-size: 100vw 100%;
     transition: width 1s linear;
   }
 </style>

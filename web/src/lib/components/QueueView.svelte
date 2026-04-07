@@ -234,7 +234,7 @@
         >
           <div class="track-indicator">
             {#if track.id === currentTrackId}
-              <Play size={14} fill="#1db954" color="#1db954" />
+              <Play size={14} fill="#4ec484" color="#4ec484" />
             {:else}
               <span class="track-num">{idx + 1}</span>
             {/if}
@@ -318,7 +318,7 @@
   .drag-hint {
     text-align: center;
     font-size: 0.75rem;
-    color: #1db954;
+    color: #4ec484;
     padding: 0.4rem 0;
     font-weight: 600;
   }
@@ -363,8 +363,8 @@
   }
 
   .queue-item.current {
-    background: #1a2e1a;
-    border-left: 3px solid #1db954;
+    background: #1a2e2a;
+    border-left: 3px solid #4ec484;
   }
 
   .queue-item.dragging {
@@ -390,7 +390,7 @@
   }
 
   .queue-item.current .track-indicator {
-    background: rgba(29, 185, 84, 0.2);
+    background: rgba(78, 196, 132, 0.2);
   }
 
   .track-num {
