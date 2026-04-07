@@ -579,20 +579,29 @@ func TestPurgeMissingTracks(t *testing.T) {
 	s := setupTestStore(t)
 	ctx := context.Background()
 
-	// Insert tracks: one that will be in the "existing" set, one that won't
+	// Insert tracks: one matching new dir, one active from old dir, one soft-deleted from old dir
 	if err := s.UpsertTrack(ctx, newTrack("sub/new.flac", "New", "", "")); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpsertTrack(ctx, newTrack("old/song.flac", "Old", "", "")); err != nil {
+	if err := s.UpsertTrack(ctx, newTrack("old/active.flac", "OldActive", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertTrack(ctx, newTrack("old/rejected.flac", "OldRejected", "", "")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Increment play count on old track to verify it gets purged, not just soft-deleted
-	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
-	for _, tr := range tracks {
-		if tr.Title == "Old" {
-			s.IncrementPlayCount(ctx, tr.ID)
+	// Mark one old track as soft-deleted (simulates a rejected/swiped-left track)
+	allTracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	for _, tr := range allTracks {
+		if tr.Title == "OldRejected" {
+			s.MarkDeleted(ctx, tr.ID)
 		}
+	}
+
+	// Verify soft-deleted track exists in deletion list
+	deleted, _ := s.ListDeleted(ctx)
+	if len(deleted) != 1 {
+		t.Fatalf("expected 1 soft-deleted before purge, got %d", len(deleted))
 	}
 
 	existing := map[string]bool{"sub/new.flac": true}
@@ -600,17 +609,17 @@ func TestPurgeMissingTracks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if purged != 1 {
-		t.Errorf("expected 1 purged, got %d", purged)
+	if purged != 2 {
+		t.Errorf("expected 2 purged (1 active + 1 soft-deleted), got %d", purged)
 	}
 
-	// Old track should be completely gone from DB (not in deleted list)
-	deleted, err := s.ListDeleted(ctx)
+	// Both old tracks should be completely gone — including the soft-deleted one
+	deleted, err = s.ListDeleted(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(deleted) != 0 {
-		t.Errorf("expected 0 deleted tracks, got %d (purge should hard-delete, not soft-delete)", len(deleted))
+		t.Errorf("expected 0 deleted tracks after purge, got %d", len(deleted))
 	}
 
 	// Only the new track should remain

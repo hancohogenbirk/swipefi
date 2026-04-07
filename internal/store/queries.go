@@ -99,9 +99,9 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 // PurgeMissingTracks hard-deletes tracks not found in the current scan.
 // Used when switching music directories — orphaned tracks from the old dir
 // should be removed entirely, not soft-deleted into the deletion UI.
-// No os.Stat check needed: existingPaths is authoritative for the new dir.
+// Purges both active AND soft-deleted tracks so the deletion UI is clean.
 func (s *Store) PurgeMissingTracks(ctx context.Context, existingPaths map[string]bool) (int, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
+	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks")
 	if err != nil {
 		return 0, fmt.Errorf("query tracks: %w", err)
 	}
