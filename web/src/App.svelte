@@ -120,16 +120,22 @@
     window.removeEventListener('popstate', handlePopState);
   });
 
+  async function pollScanOnce() {
+    try {
+      scanProgress = await api.scanStatus();
+      if (!scanProgress.scanning) {
+        stopScanPolling();
+      }
+    } catch { /* ignore */ }
+  }
+
   function startScanPolling() {
     stopScanPolling();
-    scanPollTimer = setInterval(async () => {
-      try {
-        scanProgress = await api.scanStatus();
-        if (!scanProgress.scanning) {
-          stopScanPolling();
-        }
-      } catch { /* ignore */ }
-    }, 500);
+    // Set scanning immediately so UI reacts before the first poll returns
+    scanProgress = { ...scanProgress, scanning: true };
+    // Poll once immediately (no 500ms blind window), then every 500ms
+    pollScanOnce();
+    scanPollTimer = setInterval(pollScanOnce, 500);
   }
 
   function stopScanPolling() {
