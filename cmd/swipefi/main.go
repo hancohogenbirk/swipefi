@@ -54,7 +54,7 @@ func run() error {
 	}
 	var deleteDir string
 	if musicDir != "" {
-		deleteDir = filepath.Join(musicDir, "to_delete")
+		deleteDir = library.DeleteDir(musicDir)
 	}
 
 	slog.Info("starting swipefi",

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"swipefi/internal/library"
 )
 
 type DirEntry struct {
@@ -107,9 +109,7 @@ func (a *API) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		name := e.Name()
-		// Skip hidden dirs, Synology system dirs, and to_delete
-		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "@") ||
-			name == "#recycle" || name == "to_delete" {
+		if library.IsSkippedDir(name) {
 			continue
 		}
 		dirs = append(dirs, DirEntry{
@@ -138,7 +138,7 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 	musicDir := a.scanner.MusicDir()
 	var deleteDir string
 	if musicDir != "" {
-		deleteDir = filepath.Join(musicDir, "to_delete")
+		deleteDir = library.DeleteDir(musicDir)
 	}
 
 	// Look up the connected device name from the saved UDN
@@ -179,7 +179,7 @@ func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{
 			"status":     "ok",
 			"music_dir":  req.Path,
-			"delete_dir": filepath.Join(req.Path, "to_delete"),
+			"delete_dir": library.DeleteDir(req.Path),
 		})
 		return
 	}
@@ -190,7 +190,7 @@ func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deleteDir := filepath.Join(req.Path, "to_delete")
+	deleteDir := library.DeleteDir(req.Path)
 	slog.Info("music directory set", "path", req.Path, "delete_dir", deleteDir)
 
 	// Notify the app to reconfigure (via callback)

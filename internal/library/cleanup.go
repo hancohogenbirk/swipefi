@@ -3,25 +3,23 @@ package library
 import (
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-// ignoredEntries are files/dirs created by OS or NAS indexing services
-// that should not prevent a directory from being considered "empty".
-var ignoredEntries = map[string]bool{
-	"@eaDir":     true, // Synology extended attributes
-	"#recycle":   true, // Synology recycle bin
-	".DS_Store":  true, // macOS
-	"Thumbs.db":  true, // Windows
-	"desktop.ini": true, // Windows
-}
+// Additional file names (not dirs) that should not prevent a directory
+// from being considered "empty" during cleanup.
+const (
+	MacDSStore  = ".DS_Store"
+	WinThumbs   = "Thumbs.db"
+	WinDesktopIni = "desktop.ini"
+)
 
 func isIgnoredEntry(name string) bool {
-	if ignoredEntries[name] {
+	// Reuse the directory skip list (covers @eaDir, #recycle, dot-prefixed, etc.)
+	if IsSkippedDir(name) {
 		return true
 	}
-	// Also ignore any dot-prefixed entries (hidden files/dirs)
-	return strings.HasPrefix(name, ".")
+	// Also ignore OS-generated files
+	return name == WinThumbs || name == WinDesktopIni
 }
 
 // CleanupEmptyDirs removes dir if effectively empty (only contains ignored entries),

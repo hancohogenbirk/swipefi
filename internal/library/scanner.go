@@ -12,6 +12,30 @@ import (
 	"swipefi/internal/store"
 )
 
+// DeleteDirName is the folder name used for rejected tracks (relative to music dir).
+const DeleteDirName = "to_delete"
+
+// System/NAS directory names that should be skipped during scanning and browsing.
+const (
+	SynologyEADir     = "@eaDir"
+	SynologyRecycleBin = "#recycle"
+)
+
+// DeleteDir returns the full path to the delete directory for a given music dir.
+func DeleteDir(musicDir string) string {
+	return filepath.Join(musicDir, DeleteDirName)
+}
+
+// IsSkippedDir returns true if the directory name should be skipped during
+// scanning, browsing, and cleanup (system dirs, hidden dirs, delete dir).
+func IsSkippedDir(name string) bool {
+	return name == DeleteDirName ||
+		name == SynologyEADir ||
+		name == SynologyRecycleBin ||
+		strings.HasPrefix(name, "@") ||
+		strings.HasPrefix(name, ".")
+}
+
 type ScanStatus struct {
 	Scanning bool   `json:"scanning"`
 	Scanned  int    `json:"scanned"`
@@ -98,8 +122,7 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
-				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+			if IsSkippedDir(name) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -142,8 +165,7 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 
 		if d.IsDir() {
 			name := d.Name()
-			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
-				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+			if IsSkippedDir(name) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -286,8 +308,7 @@ func (sc *Scanner) ScanFolder(ctx context.Context, folder string) (int, error) {
 
 		if d.IsDir() {
 			name := d.Name()
-			if name == "to_delete" || name == "@eaDir" || name == "#recycle" ||
-				strings.HasPrefix(name, "@") || strings.HasPrefix(name, ".") {
+			if IsSkippedDir(name) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -368,8 +389,7 @@ func (sc *Scanner) ListFolders(path string) ([]FolderEntry, error) {
 			continue
 		}
 		name := e.Name()
-		if name == "to_delete" || name == "#recycle" ||
-			strings.HasPrefix(name, ".") || strings.HasPrefix(name, "@") {
+		if IsSkippedDir(name) {
 			continue
 		}
 
