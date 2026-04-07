@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,8 +188,14 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.currentStreamURL = streamURL
 	slog.Info("playing track", "title", track.Title, "artist", track.Artist, "url", streamURL)
 
-	// Build DIDL-Lite metadata so the renderer shows track info and art
+	// Pre-warm art cache so renderer and frontend see consistent art
 	artURL := fmt.Sprintf("http://%s:%s/api/tracks/%d/art", p.localIP, p.port, track.ID)
+	artResp, artErr := http.Get(artURL)
+	if artErr == nil {
+		artResp.Body.Close()
+	}
+
+	// Build DIDL-Lite metadata so the renderer shows track info and art
 	metadata := buildDIDLMetadata(track, streamURL, artURL)
 
 	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
@@ -481,6 +488,7 @@ func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
 			slog.Info("play count incremented", "track_id", track.ID, "title", track.Title, "new_count", track.PlayCount)
 		}
 		p.playCounted = true
+		p.notify()
 	}
 }
 

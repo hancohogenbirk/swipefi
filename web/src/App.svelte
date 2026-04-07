@@ -166,7 +166,6 @@
         startScanPolling();
       }
       appPhase = 'main';
-      activeTab = 'folders';
       error = '';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to select device';
@@ -278,7 +277,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} />
         {:else}
-          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} />
+          <Settings onDone={() => activeTab = 'folders'} onOpenDeleted={() => showDeletedManager = true} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} />
         {/if}
       </div>
     </div>

@@ -133,11 +133,24 @@ func run() error {
 		}()
 	}
 
-	// DLNA discovery in background
+	// DLNA discovery + auto-reconnect to last device
 	go func() {
 		time.Sleep(2 * time.Second)
 		if err := discovery.Scan(ctx); err != nil {
 			slog.Error("initial discovery failed", "err", err)
+			return
+		}
+
+		// Try auto-reconnect to last selected device
+		savedUDN, _ := s.GetConfig("selected_device_udn")
+		if savedUDN != "" {
+			if renderer, ok := discovery.GetRenderer(savedUDN); ok {
+				transport := dlna.NewTransport(renderer.Transport)
+				p.SetTransport(transport)
+				slog.Info("auto-reconnected to device", "name", renderer.Name, "udn", savedUDN)
+			} else {
+				slog.Info("saved device not found, manual selection required", "udn", savedUDN)
+			}
 		}
 	}()
 

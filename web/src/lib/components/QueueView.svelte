@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { ArrowLeft, ChevronUp, ChevronDown, Play } from 'lucide-svelte';
@@ -41,6 +42,16 @@
       tracks = [];
     } finally {
       loading = false;
+    }
+    scrollToCurrent();
+  }
+
+  async function scrollToCurrent() {
+    await tick();
+    if (!listEl) return;
+    const currentEl = listEl.querySelector('.queue-item.current') as HTMLElement;
+    if (currentEl) {
+      currentEl.scrollIntoView({ block: 'start', behavior: 'instant' });
     }
   }
 

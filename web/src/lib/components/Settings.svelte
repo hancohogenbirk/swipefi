@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, visible = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; visible?: boolean } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -222,21 +222,25 @@
     </button>
   {/if}
 
-  <!-- Connected Device -->
-  {#if onDisconnect && connectedDevice}
-    <div class="section-divider"></div>
-    <div class="settings-item device-item">
-      <Speaker size={20} />
-      <div class="item-content">
-        <span class="item-label">Connected Device</span>
-        <span class="item-value">{connectedDevice}</span>
-      </div>
+  <!-- Audio Device -->
+  <div class="section-divider"></div>
+  <div class="settings-item device-item">
+    <Speaker size={20} />
+    <div class="item-content">
+      <span class="item-label">Audio Device</span>
+      <span class="item-value">{connectedDevice || 'Not connected'}</span>
+    </div>
+    {#if connectedDevice && onDisconnect}
       <button class="disconnect-btn" onclick={disconnect}>
         <Unplug size={14} />
         <span>Disconnect</span>
       </button>
-    </div>
-  {/if}
+    {:else if onSelectDevice}
+      <button class="select-device-btn" onclick={onSelectDevice}>
+        <span>Select</span>
+      </button>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -412,6 +416,25 @@
 
   .disconnect-btn:hover {
     background: #444;
+  }
+
+  .select-device-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: #7cb3ff;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 16px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .select-device-btn:hover {
+    background: #94c1ff;
   }
 
   .loading, .empty {

@@ -36,8 +36,11 @@ export function connectWebSocket() {
 
   ws.onclose = () => {
     ws = null;
-    // Reconnect after 2 seconds
-    reconnectTimer = setTimeout(connectWebSocket, 2000);
+    // Reconnect after 2 seconds and re-fetch state
+    reconnectTimer = setTimeout(async () => {
+      connectWebSocket();
+      await loadInitialState();
+    }, 2000);
   };
 
   ws.onerror = () => {

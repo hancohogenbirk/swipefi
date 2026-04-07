@@ -34,6 +34,11 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 	transport := dlna.NewTransport(renderer.Transport)
 	a.player.SetTransport(transport)
 
+	// Persist selected device for auto-reconnect
+	if err := a.store.SetConfig("selected_device_udn", req.UDN); err != nil {
+		slog.Warn("failed to persist selected device", "err", err)
+	}
+
 	slog.Info("selected renderer", "name", renderer.Name, "udn", renderer.UDN)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
