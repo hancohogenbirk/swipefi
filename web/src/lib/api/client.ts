@@ -75,7 +75,7 @@ export const api = {
   skipTo: (track_id: number) => request<PlayerState>('POST', '/api/player/queue/skip-to', { track_id }),
 
   // Config
-  config: () => request<{ music_dir: string; delete_dir: string }>('GET', '/api/config'),
+  config: () => request<{ music_dir: string; delete_dir: string; connected_device: string }>('GET', '/api/config'),
   setMusicDir: (path: string) =>
     request<{ status: string; music_dir: string; delete_dir: string }>('POST', '/api/config/music-dir', { path }),
   shortcuts: () => request<{ name: string; path: string }[]>('GET', '/api/browse/shortcuts'),

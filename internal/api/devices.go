@@ -48,6 +48,7 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) DisconnectDevice(w http.ResponseWriter, r *http.Request) {
 	a.player.Disconnect(r.Context())
+	a.store.SetConfig("selected_device_udn", "")
 	slog.Info("device disconnected")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -140,9 +140,19 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 		deleteDir = filepath.Join(musicDir, "to_delete")
 	}
 
+	// Look up the connected device name from the saved UDN
+	var connectedDevice string
+	savedUDN, _ := a.store.GetConfig("selected_device_udn")
+	if savedUDN != "" {
+		if renderer, ok := a.discovery.GetRenderer(savedUDN); ok {
+			connectedDevice = renderer.Name
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
-		"music_dir":  musicDir,
-		"delete_dir": deleteDir,
+		"music_dir":        musicDir,
+		"delete_dir":       deleteDir,
+		"connected_device": connectedDevice,
 	})
 }
 

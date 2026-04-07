@@ -94,10 +94,8 @@
 
   async function loadDeviceInfo() {
     try {
-      const devices = await api.devices();
-      if (devices?.length > 0) {
-        connectedDevice = devices[0].name;
-      }
+      const config = await api.config();
+      connectedDevice = config.connected_device || '';
     } catch {
       // ignore
     }
