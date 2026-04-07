@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"swipefi/internal/dlna"
+	"swipefi/internal/library"
 	"swipefi/internal/store"
 )
 
@@ -397,6 +398,9 @@ func (p *Player) Reject(ctx context.Context) error {
 	if err := os.Rename(srcPath, dstPath); err != nil {
 		return fmt.Errorf("move file: %w", err)
 	}
+
+	// Clean up empty source directory
+	library.CleanupEmptyDirs(filepath.Dir(srcPath), p.musicDir)
 
 	slog.Info("rejected track", "path", track.Path)
 

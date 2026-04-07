@@ -113,4 +113,52 @@ func TestCleanupEmptyDirs(t *testing.T) {
 		// must not panic or crash
 		CleanupEmptyDirs(nonexistent, root)
 	})
+
+	t.Run("removes dir containing only ignored entries like @eaDir", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "cleanup-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		dir := filepath.Join(root, "Artist", "Album")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create Synology @eaDir and macOS .DS_Store
+		os.MkdirAll(filepath.Join(dir, "@eaDir"), 0o755)
+		os.WriteFile(filepath.Join(dir, ".DS_Store"), []byte("data"), 0o644)
+
+		CleanupEmptyDirs(dir, root)
+
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Error("expected dir with only ignored entries to be removed")
+		}
+		if _, err := os.Stat(filepath.Join(root, "Artist")); !os.IsNotExist(err) {
+			t.Error("expected empty parent to be removed too")
+		}
+	})
+
+	t.Run("does not remove dir with real content plus ignored entries", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "cleanup-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		dir := filepath.Join(root, "Artist")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		os.MkdirAll(filepath.Join(dir, "@eaDir"), 0o755)
+		os.WriteFile(filepath.Join(dir, "song.flac"), []byte("audio"), 0o644)
+
+		CleanupEmptyDirs(dir, root)
+
+		if _, err := os.Stat(dir); err != nil {
+			t.Error("expected dir with real content to remain")
+		}
+	})
 }

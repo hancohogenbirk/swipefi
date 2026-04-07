@@ -107,8 +107,9 @@ func (a *API) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		name := e.Name()
-		// Skip hidden directories
-		if strings.HasPrefix(name, ".") {
+		// Skip hidden dirs, Synology system dirs, and to_delete
+		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "@") ||
+			name == "#recycle" || name == "to_delete" {
 			continue
 		}
 		dirs = append(dirs, DirEntry{
