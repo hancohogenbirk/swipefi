@@ -48,19 +48,20 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 // MarkMissingAsDeleted marks tracks as deleted if their file no longer exists on disk.
 // Uses existingPaths from the walk as a fast check, then does an os.Stat for any
 // candidate not in the map (handles transient walk errors over network filesystems).
-func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, error) {
+func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, []string, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
 	if err != nil {
-		return 0, fmt.Errorf("query tracks: %w", err)
+		return 0, nil, fmt.Errorf("query tracks: %w", err)
 	}
 	defer rows.Close()
 
 	var toDelete []int64
+	var deletedPaths []string
 	for rows.Next() {
 		var id int64
 		var path string
 		if err := rows.Scan(&id, &path); err != nil {
-			return 0, fmt.Errorf("scan: %w", err)
+			return 0, nil, fmt.Errorf("scan: %w", err)
 		}
 		if existingPaths[path] {
 			continue
@@ -71,16 +72,51 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 			continue // file exists, walk just missed it
 		}
 		toDelete = append(toDelete, id)
+		deletedPaths = append(deletedPaths, path)
 	}
 	if err := rows.Err(); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	for _, id := range toDelete {
 		s.db.ExecContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?", id)
 	}
 
-	return len(toDelete), nil
+	return len(toDelete), deletedPaths, nil
+}
+
+// UpsertTrackBatch inserts or updates multiple tracks in a single transaction.
+func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	now := time.Now().Unix()
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(path) DO UPDATE SET
+			title = excluded.title,
+			artist = excluded.artist,
+			album = excluded.album,
+			duration_ms = excluded.duration_ms,
+			format = excluded.format,
+			deleted = 0
+	`)
+	if err != nil {
+		return fmt.Errorf("prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, t := range tracks {
+		if _, err := stmt.ExecContext(ctx, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now); err != nil {
+			return fmt.Errorf("exec %s: %w", t.Path, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {

@@ -162,6 +162,17 @@ func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// No-op if same directory
+	currentDir := a.scanner.MusicDir()
+	if filepath.Clean(req.Path) == filepath.Clean(currentDir) {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status":     "ok",
+			"music_dir":  req.Path,
+			"delete_dir": filepath.Join(req.Path, "to_delete"),
+		})
+		return
+	}
+
 	if err := a.store.SetConfig("music_dir", req.Path); err != nil {
 		slog.Error("save music dir", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to save config")

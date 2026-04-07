@@ -92,17 +92,13 @@ func run() error {
 	// Handle music dir changes from the settings UI
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
 		slog.Info("music directory changed", "path", newMusicDir)
-		// Clear old tracks from DB before scanning new dir
-		if err := s.ClearAllTracks(ctx); err != nil {
-			slog.Error("clear tracks on dir change", "err", err)
-		}
 		scanner.SetMusicDir(newMusicDir)
 		p.SetDirs(newMusicDir, newDeleteDir)
 		os.MkdirAll(newDeleteDir, 0755)
 
-		// Trigger a rescan in background
+		// Trigger a rescan in background (play counts preserved via UpsertTrack)
 		go func() {
-			count, err := scanner.Scan(ctx)
+			count, err := scanner.Scan(ctx, false)
 			if err != nil {
 				slog.Error("rescan after config change", "err", err)
 				return
@@ -128,7 +124,7 @@ func run() error {
 	if musicDir != "" {
 		os.MkdirAll(deleteDir, 0755)
 		go func() {
-			count, err := scanner.Scan(ctx)
+			count, err := scanner.Scan(ctx, false)
 			if err != nil {
 				slog.Error("initial scan failed", "err", err)
 				return

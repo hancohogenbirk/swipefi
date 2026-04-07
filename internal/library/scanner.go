@@ -58,7 +58,7 @@ func (sc *Scanner) IsInitialScan() bool {
 	return sc.status.Scanning && sc.initialScan
 }
 
-func (sc *Scanner) Scan(ctx context.Context) (int, error) {
+func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 	sc.mu.Lock()
 	if sc.scanCancel != nil {
 		sc.scanCancel()
@@ -104,6 +104,18 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 
 	existingPaths := make(map[string]bool)
 	var count int
+	var batch []*store.Track
+	const batchSize = 500
+
+	flushBatch := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := sc.store.UpsertTrackBatch(scanCtx, batch); err != nil {
+			slog.Warn("batch upsert error", "err", err)
+		}
+		batch = batch[:0]
+	}
 
 	err := filepath.WalkDir(musicDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -136,7 +148,7 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 		existingPaths[relPath] = true
 
 		// Skip metadata reading for tracks already in DB (major speedup on rescan)
-		if sc.store.TrackExistsByPath(scanCtx, relPath) {
+		if !force && sc.store.TrackExistsByPath(scanCtx, relPath) {
 			count++
 			sc.mu.Lock()
 			sc.status.Scanned = count
@@ -160,9 +172,9 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 			AddedAt:    meta.AddedAt,
 		}
 
-		if err := sc.store.UpsertTrack(scanCtx, track); err != nil {
-			slog.Warn("upsert error", "path", relPath, "err", err)
-			return nil
+		batch = append(batch, track)
+		if len(batch) >= batchSize {
+			flushBatch()
 		}
 
 		count++
@@ -176,6 +188,9 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 
 		return nil
 	})
+
+	// Flush remaining batch
+	flushBatch()
 
 	sc.mu.Lock()
 	sc.status.Scanning = false
@@ -191,11 +206,18 @@ func (sc *Scanner) Scan(ctx context.Context) (int, error) {
 	// Skip if walk found no files (likely mount not ready)
 	var orphaned int
 	if count > 0 {
-		orphaned, err = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
-		if err != nil {
-			slog.Warn("cleanup orphaned tracks failed", "err", err)
+		var deletedPaths []string
+		var markErr error
+		orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
+		if markErr != nil {
+			slog.Warn("cleanup orphaned tracks failed", "err", markErr)
 		} else if orphaned > 0 {
 			slog.Info("marked orphaned tracks as deleted", "count", orphaned)
+			// Clean up empty directories from disk
+			for _, p := range deletedPaths {
+				dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
+				CleanupEmptyDirs(dir, musicDir)
+			}
 		}
 	}
 

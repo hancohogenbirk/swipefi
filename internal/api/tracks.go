@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -101,7 +102,7 @@ func (a *API) ScanStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) ScanLibrary(w http.ResponseWriter, r *http.Request) {
-	count, err := a.scanner.Scan(r.Context())
+	count, err := a.scanner.Scan(r.Context(), false)
 	if err != nil {
 		slog.Error("scan library", "err", err)
 		writeError(w, http.StatusInternalServerError, "scan failed")
@@ -112,4 +113,22 @@ func (a *API) ScanLibrary(w http.ResponseWriter, r *http.Request) {
 		"status": "ok",
 		"tracks": count,
 	})
+}
+
+func (a *API) RescanLibrary(w http.ResponseWriter, r *http.Request) {
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "scan already in progress")
+		return
+	}
+
+	go func() {
+		count, err := a.scanner.Scan(context.Background(), true)
+		if err != nil {
+			slog.Error("force rescan failed", "err", err)
+			return
+		}
+		slog.Info("force rescan complete", "tracks", count)
+	}()
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "scanning"})
 }

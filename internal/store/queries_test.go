@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -456,5 +457,120 @@ func TestConfig_MissingKeyReturnsEmpty(t *testing.T) {
 	}
 	if val != "" {
 		t.Errorf("expected empty string for missing key, got %q", val)
+	}
+}
+
+func TestUpsertTrack_PreservesPlayCount(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	track := newTrack("music/song.flac", "Song", "Artist", "Album")
+	if err := s.UpsertTrack(ctx, track); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	id := tracks[0].ID
+
+	if err := s.IncrementPlayCount(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.IncrementPlayCount(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+
+	updated := newTrack("music/song.flac", "New Title", "New Artist", "New Album")
+	if err := s.UpsertTrack(ctx, updated); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetTrack(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PlayCount != 2 {
+		t.Errorf("expected play_count=2 after re-upsert, got %d", got.PlayCount)
+	}
+	if got.Title != "New Title" {
+		t.Errorf("expected title updated, got %q", got.Title)
+	}
+}
+
+func TestUpsertTrackBatch(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	batch := []*Track{
+		newTrack("music/a.flac", "A", "Artist", "Album"),
+		newTrack("music/b.flac", "B", "Artist", "Album"),
+		newTrack("music/c.flac", "C", "Artist", "Album"),
+	}
+
+	if err := s.UpsertTrackBatch(ctx, batch); err != nil {
+		t.Fatalf("batch upsert: %v", err)
+	}
+
+	count, err := s.TrackCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Errorf("expected 3 tracks, got %d", count)
+	}
+
+	// Re-upsert with updated metadata — play count should survive
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	if err := s.IncrementPlayCount(ctx, tracks[0].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	updatedBatch := []*Track{
+		newTrack("music/a.flac", "A Updated", "Artist", "Album"),
+	}
+	if err := s.UpsertTrackBatch(ctx, updatedBatch); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.GetTrack(ctx, tracks[0].ID)
+	if got.PlayCount != 1 {
+		t.Errorf("expected play_count=1 after batch re-upsert, got %d", got.PlayCount)
+	}
+	if got.Title != "A Updated" {
+		t.Errorf("expected title updated, got %q", got.Title)
+	}
+}
+
+func TestMarkMissingAsDeleted_ReturnsPaths(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	musicDir := filepath.Join(dir, "music")
+	if err := os.MkdirAll(filepath.Join(musicDir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	realFile := filepath.Join(musicDir, "sub", "exists.flac")
+	if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.UpsertTrack(ctx, newTrack("sub/exists.flac", "Exists", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertTrack(ctx, newTrack("sub/gone.flac", "Gone", "", "")); err != nil {
+		t.Fatal(err)
+	}
+
+	existing := map[string]bool{"sub/exists.flac": true}
+	count, paths, err := s.MarkMissingAsDeleted(ctx, existing, musicDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 deleted, got %d", count)
+	}
+	if len(paths) != 1 || paths[0] != "sub/gone.flac" {
+		t.Errorf("expected paths=[sub/gone.flac], got %v", paths)
 	}
 }
