@@ -85,6 +85,43 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 	return len(toDelete), deletedPaths, nil
 }
 
+// PurgeMissingTracks hard-deletes tracks whose files no longer exist.
+// Used when switching music directories — orphaned tracks from the old dir
+// should be removed entirely, not soft-deleted into the deletion UI.
+func (s *Store) PurgeMissingTracks(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
+	if err != nil {
+		return 0, fmt.Errorf("query tracks: %w", err)
+	}
+	defer rows.Close()
+
+	var toPurge []int64
+	for rows.Next() {
+		var id int64
+		var path string
+		if err := rows.Scan(&id, &path); err != nil {
+			return 0, fmt.Errorf("scan: %w", err)
+		}
+		if existingPaths[path] {
+			continue
+		}
+		fullPath := filepath.Join(musicDir, filepath.FromSlash(path))
+		if _, err := os.Stat(fullPath); err == nil {
+			continue
+		}
+		toPurge = append(toPurge, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, id := range toPurge {
+		s.db.ExecContext(ctx, "DELETE FROM tracks WHERE id = ?", id)
+	}
+
+	return len(toPurge), nil
+}
+
 // UpsertTrackBatch inserts or updates multiple tracks in a single transaction.
 func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 	tx, err := s.db.BeginTx(ctx, nil)

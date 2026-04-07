@@ -97,8 +97,9 @@ func run() error {
 		os.MkdirAll(newDeleteDir, 0755)
 
 		// Trigger a rescan in background (play counts preserved via UpsertTrack)
+		// purgeOrphans=true: hard-delete old dir tracks instead of soft-deleting
 		go func() {
-			count, err := scanner.Scan(ctx, false)
+			count, err := scanner.Scan(ctx, false, true)
 			if err != nil {
 				slog.Error("rescan after config change", "err", err)
 				return

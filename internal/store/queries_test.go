@@ -574,3 +574,63 @@ func TestMarkMissingAsDeleted_ReturnsPaths(t *testing.T) {
 		t.Errorf("expected paths=[sub/gone.flac], got %v", paths)
 	}
 }
+
+func TestPurgeMissingTracks(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	newMusicDir := filepath.Join(dir, "new")
+	if err := os.MkdirAll(filepath.Join(newMusicDir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real file that exists in the new dir
+	realFile := filepath.Join(newMusicDir, "sub", "new.flac")
+	if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert tracks: one matching new dir, one from old dir
+	if err := s.UpsertTrack(ctx, newTrack("sub/new.flac", "New", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertTrack(ctx, newTrack("old/song.flac", "Old", "", "")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Increment play count on old track to verify it gets purged, not just soft-deleted
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	for _, tr := range tracks {
+		if tr.Title == "Old" {
+			s.IncrementPlayCount(ctx, tr.ID)
+		}
+	}
+
+	existing := map[string]bool{"sub/new.flac": true}
+	purged, err := s.PurgeMissingTracks(ctx, existing, newMusicDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if purged != 1 {
+		t.Errorf("expected 1 purged, got %d", purged)
+	}
+
+	// Old track should be completely gone from DB (not in deleted list)
+	deleted, err := s.ListDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 0 {
+		t.Errorf("expected 0 deleted tracks, got %d (purge should hard-delete, not soft-delete)", len(deleted))
+	}
+
+	// Only the new track should remain
+	count, err := s.TrackCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 remaining track, got %d", count)
+	}
+}

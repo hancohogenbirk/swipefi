@@ -58,7 +58,7 @@ func (sc *Scanner) IsInitialScan() bool {
 	return sc.status.Scanning && sc.initialScan
 }
 
-func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
+func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (int, error) {
 	sc.mu.Lock()
 	if sc.scanCancel != nil {
 		sc.scanCancel()
@@ -202,21 +202,33 @@ func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 		return count, err
 	}
 
-	// Mark tracks whose files no longer exist on disk
+	// Handle tracks whose files no longer exist on disk
 	// Skip if walk found no files (likely mount not ready)
+	shouldPurge := len(purgeOrphans) > 0 && purgeOrphans[0]
 	var orphaned int
 	if count > 0 {
-		var deletedPaths []string
-		var markErr error
-		orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
-		if markErr != nil {
-			slog.Warn("cleanup orphaned tracks failed", "err", markErr)
-		} else if orphaned > 0 {
-			slog.Info("marked orphaned tracks as deleted", "count", orphaned)
-			// Clean up empty directories from disk
-			for _, p := range deletedPaths {
-				dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
-				CleanupEmptyDirs(dir, musicDir)
+		if shouldPurge {
+			// Music dir changed — hard-delete old tracks (don't pollute deletion UI)
+			var purgeErr error
+			orphaned, purgeErr = sc.store.PurgeMissingTracks(scanCtx, existingPaths, musicDir)
+			if purgeErr != nil {
+				slog.Warn("purge orphaned tracks failed", "err", purgeErr)
+			} else if orphaned > 0 {
+				slog.Info("purged orphaned tracks from old directory", "count", orphaned)
+			}
+		} else {
+			// Normal rescan — soft-delete missing tracks (user can restore)
+			var deletedPaths []string
+			var markErr error
+			orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
+			if markErr != nil {
+				slog.Warn("cleanup orphaned tracks failed", "err", markErr)
+			} else if orphaned > 0 {
+				slog.Info("marked orphaned tracks as deleted", "count", orphaned)
+				for _, p := range deletedPaths {
+					dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
+					CleanupEmptyDirs(dir, musicDir)
+				}
 			}
 		}
 	}
