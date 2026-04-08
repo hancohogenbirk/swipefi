@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { getPlayerState, updateState, getPlayerLoading } from '../stores/player.svelte';
   import { ListMusic } from 'lucide-svelte';
   import SwipeCard from './SwipeCard.svelte';
   import ProgressBar from './ProgressBar.svelte';
@@ -10,6 +10,7 @@
 
   let ps = $derived(getPlayerState());
   let track = $derived(ps.track);
+  let playerLoading = $derived(getPlayerLoading());
   let transitioning = $state(false);
 
   async function handleSwipeLeft() {
@@ -46,7 +47,12 @@
   </header>
 
   <div class="card-area">
-    {#if track && !transitioning}
+    {#if playerLoading && !track}
+      <div class="loading-message">
+        <div class="loading-spinner"></div>
+        <p>Starting playback...</p>
+      </div>
+    {:else if track && !transitioning}
       {#key track.id}
         <SwipeCard
           {track}
@@ -136,5 +142,31 @@
   .idle-hint {
     font-size: 0.9rem;
     color: #555;
+  }
+
+  .loading-message {
+    text-align: center;
+    color: var(--color-text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .loading-message p {
+    font-size: 1rem;
+  }
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #333;
+    border-top-color: var(--color-accent, #1db954);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

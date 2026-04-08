@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
-  import { updateState } from '../stores/player.svelte';
+  import { updateState, setPlayerLoading } from '../stores/player.svelte';
   import { Folder as FolderIcon, ArrowUp, Play, Music } from 'lucide-svelte';
 
   let { onNavigateToPlayer, onFolderNavigate, goBackSignal = 0, refreshSignal = 0 }: {
@@ -41,11 +41,13 @@
   }
 
   async function playFolder(folderPath: string) {
+    setPlayerLoading(true);
+    onNavigateToPlayer();
     try {
       const state = await api.play(folderPath, getSort(), getOrder());
       updateState(state);
-      onNavigateToPlayer();
     } catch (e) {
+      setPlayerLoading(false);
       error = e instanceof Error ? e.message : 'Failed to start playback';
     }
   }

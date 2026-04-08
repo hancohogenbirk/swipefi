@@ -13,12 +13,23 @@ let state = $state<PlayerState>({
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+let loading = $state(false);
+
 export function getPlayerState(): PlayerState {
   return state;
 }
 
+export function getPlayerLoading(): boolean {
+  return loading;
+}
+
+export function setPlayerLoading(value: boolean) {
+  loading = value;
+}
+
 export function updateState(newState: PlayerState) {
   state = newState;
+  loading = false;
 }
 
 export function connectWebSocket() {
@@ -31,6 +42,7 @@ export function connectWebSocket() {
     try {
       const newState: PlayerState = JSON.parse(event.data);
       state = newState;
+      loading = false;
     } catch {
       // ignore parse errors
     }
