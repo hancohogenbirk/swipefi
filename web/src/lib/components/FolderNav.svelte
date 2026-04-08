@@ -73,6 +73,9 @@
   }
 
   function navigateUp() {
+    if (listEl) {
+      scrollPositions.set(currentPath, listEl.scrollTop);
+    }
     const parts = currentPath.split('/');
     parts.pop();
     loadFolders(parts.join('/'), true);
