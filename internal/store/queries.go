@@ -32,7 +32,7 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		ON CONFLICT(path, music_dir) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
 			album = excluded.album,
@@ -110,7 +110,7 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		ON CONFLICT(path, music_dir) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
 			album = excluded.album,

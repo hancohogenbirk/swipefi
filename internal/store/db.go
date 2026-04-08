@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
@@ -60,9 +61,8 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) migrateMusicDir() error {
-	_, err := s.db.Exec(`
-		ALTER TABLE tracks ADD COLUMN music_dir TEXT NOT NULL DEFAULT ''
-	`)
+	// Step 1: Add music_dir column if it doesn't exist
+	_, err := s.db.Exec(`ALTER TABLE tracks ADD COLUMN music_dir TEXT NOT NULL DEFAULT ''`)
 	if err != nil {
 		var dummy string
 		checkErr := s.db.QueryRow("SELECT music_dir FROM tracks LIMIT 1").Scan(&dummy)
@@ -70,7 +70,54 @@ func (s *Store) migrateMusicDir() error {
 			return fmt.Errorf("add music_dir column: %w", err)
 		}
 	}
+
+	// Step 2: Migrate UNIQUE constraint from (path) to (path, music_dir)
+	// Check if migration is needed by looking at the table schema
+	var tableSql string
+	err = s.db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='tracks'").Scan(&tableSql)
+	if err != nil {
+		return fmt.Errorf("read table schema: %w", err)
+	}
+
+	// If the table does not yet have the composite UNIQUE(path, music_dir) constraint,
+	// recreate it. This covers both the fresh-table and already-altered-table cases.
+	if !strings.Contains(tableSql, "UNIQUE(path, music_dir)") {
+		if _, err = s.db.Exec(`
+			CREATE TABLE IF NOT EXISTS tracks_new (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				path        TEXT NOT NULL,
+				title       TEXT NOT NULL DEFAULT '',
+				artist      TEXT NOT NULL DEFAULT '',
+				album       TEXT NOT NULL DEFAULT '',
+				duration_ms INTEGER NOT NULL DEFAULT 0,
+				format      TEXT NOT NULL DEFAULT '',
+				play_count  INTEGER NOT NULL DEFAULT 0,
+				added_at    INTEGER NOT NULL,
+				last_played INTEGER,
+				deleted     INTEGER NOT NULL DEFAULT 0,
+				created_at  INTEGER NOT NULL,
+				music_dir   TEXT NOT NULL DEFAULT '',
+				UNIQUE(path, music_dir)
+			)`); err != nil {
+			return fmt.Errorf("create tracks_new: %w", err)
+		}
+		if _, err = s.db.Exec(`INSERT OR IGNORE INTO tracks_new SELECT * FROM tracks`); err != nil {
+			return fmt.Errorf("copy tracks: %w", err)
+		}
+		if _, err = s.db.Exec(`DROP TABLE tracks`); err != nil {
+			return fmt.Errorf("drop old tracks: %w", err)
+		}
+		if _, err = s.db.Exec(`ALTER TABLE tracks_new RENAME TO tracks`); err != nil {
+			return fmt.Errorf("rename tracks_new: %w", err)
+		}
+	}
+
+	// Recreate indexes (may have been dropped with the table)
 	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_music_dir ON tracks(music_dir)")
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count)")
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at)")
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)")
+
 	return nil
 }
 
