@@ -22,6 +22,7 @@ type Track struct {
 	AddedAt    int64  `json:"added_at"`
 	LastPlayed *int64 `json:"last_played,omitempty"`
 	Deleted    bool   `json:"-"`
+	MusicDir   string `json:"-"`
 }
 
 var ErrTrackNotFound = errors.New("track not found")
@@ -29,16 +30,17 @@ var ErrTrackNotFound = errors.New("track not found")
 func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
 			album = excluded.album,
 			duration_ms = excluded.duration_ms,
 			format = excluded.format,
-			deleted = 0
-	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now)
+			deleted = 0,
+			music_dir = excluded.music_dir
+	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir)
 	if err != nil {
 		return fmt.Errorf("upsert track: %w", err)
 	}
@@ -160,15 +162,16 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 
 	now := time.Now().Unix()
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
 			album = excluded.album,
 			duration_ms = excluded.duration_ms,
 			format = excluded.format,
-			deleted = 0
+			deleted = 0,
+			music_dir = excluded.music_dir
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
@@ -176,7 +179,7 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 	defer stmt.Close()
 
 	for _, t := range tracks {
-		if _, err := stmt.ExecContext(ctx, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now); err != nil {
+		if _, err := stmt.ExecContext(ctx, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir); err != nil {
 			return fmt.Errorf("exec %s: %w", t.Path, err)
 		}
 	}
