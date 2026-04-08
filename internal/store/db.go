@@ -28,12 +28,31 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate config: %w", err)
 	}
+	if err := s.migrateMusicDir(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate music_dir: %w", err)
+	}
 
 	return s, nil
 }
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func (s *Store) migrateMusicDir() error {
+	_, err := s.db.Exec(`
+		ALTER TABLE tracks ADD COLUMN music_dir TEXT NOT NULL DEFAULT ''
+	`)
+	if err != nil {
+		var dummy string
+		checkErr := s.db.QueryRow("SELECT music_dir FROM tracks LIMIT 1").Scan(&dummy)
+		if checkErr != nil && checkErr != sql.ErrNoRows {
+			return fmt.Errorf("add music_dir column: %w", err)
+		}
+	}
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_music_dir ON tracks(music_dir)")
+	return nil
 }
 
 func (s *Store) migrate() error {
