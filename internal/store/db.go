@@ -9,7 +9,16 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	musicDir string
+}
+
+func (s *Store) SetMusicDir(dir string) {
+	s.musicDir = dir
+}
+
+func (s *Store) MusicDir() string {
+	return s.musicDir
 }
 
 func New(dbPath string) (*Store, error) {

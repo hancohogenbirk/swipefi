@@ -59,6 +59,7 @@ func run() error {
 	if musicDir == "" {
 		musicDir, _ = s.GetConfig(store.ConfigKeyMusicDir)
 	}
+	s.SetMusicDir(musicDir)
 	var deleteDir string
 	if musicDir != "" {
 		deleteDir = library.DeleteDir(musicDir)
@@ -105,6 +106,7 @@ func run() error {
 	// Handle music dir changes from the settings UI
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
 		slog.Info("music directory changed", "path", newMusicDir)
+		s.SetMusicDir(newMusicDir)
 		scanner.SetMusicDir(newMusicDir)
 		p.SetDirs(newMusicDir, newDeleteDir)
 		os.MkdirAll(newDeleteDir, 0755)

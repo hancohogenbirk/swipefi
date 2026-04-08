@@ -210,9 +210,9 @@ func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
 // ListTracks returns tracks in a folder recursively (for playback queue building).
 func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
 	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
-		FROM tracks WHERE deleted = 0`
+		FROM tracks WHERE deleted = 0 AND music_dir = ?`
 
-	var args []any
+	args := []any{s.musicDir}
 	if folder != "" {
 		query += " AND path LIKE ?"
 		args = append(args, folder+"/%")
@@ -255,9 +255,9 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 // ListTracksDirectOnly returns only tracks that are direct children of a folder (not in subfolders).
 func (s *Store) ListTracksDirectOnly(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
 	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
-		FROM tracks WHERE deleted = 0`
+		FROM tracks WHERE deleted = 0 AND music_dir = ?`
 
-	var args []any
+	args := []any{s.musicDir}
 	if folder != "" {
 		query += " AND path LIKE ? AND path NOT LIKE ?"
 		args = append(args, folder+"/%", folder+"/%/%")
@@ -324,8 +324,8 @@ func (s *Store) MarkDeleted(ctx context.Context, id int64) error {
 func (s *Store) HasTracksInFolder(folder string) bool {
 	var count int
 	err := s.db.QueryRow(
-		"SELECT COUNT(*) FROM tracks WHERE deleted = 0 AND path LIKE ?",
-		folder+"/%",
+		"SELECT COUNT(*) FROM tracks WHERE deleted = 0 AND path LIKE ? AND music_dir = ?",
+		folder+"/%", s.musicDir,
 	).Scan(&count)
 	return err == nil && count > 0
 }
@@ -338,14 +338,14 @@ func (s *Store) ClearAllTracks(ctx context.Context) error {
 
 func (s *Store) TrackCount(ctx context.Context) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0").Scan(&count)
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 0 AND music_dir = ?", s.musicDir).Scan(&count)
 	return count, err
 }
 
 // TrackExistsByPath checks if a non-deleted track with the given path exists.
 func (s *Store) TrackExistsByPath(ctx context.Context, path string) bool {
 	var count int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE path = ? AND deleted = 0", path).Scan(&count)
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE path = ? AND deleted = 0 AND music_dir = ?", path, s.musicDir).Scan(&count)
 	return err == nil && count > 0
 }
 
@@ -353,8 +353,8 @@ func (s *Store) TrackExistsByPath(ctx context.Context, path string) bool {
 func (s *Store) ListDeleted(ctx context.Context) ([]Track, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
-		FROM tracks WHERE deleted = 1 ORDER BY title ASC
-	`)
+		FROM tracks WHERE deleted = 1 AND music_dir = ? ORDER BY title ASC
+	`, s.musicDir)
 	if err != nil {
 		return nil, fmt.Errorf("list deleted: %w", err)
 	}
@@ -397,6 +397,6 @@ func (s *Store) PurgeTrack(ctx context.Context, id int64) error {
 // DeletedCount returns the number of tracks marked as deleted.
 func (s *Store) DeletedCount(ctx context.Context) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 1").Scan(&count)
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 1 AND music_dir = ?", s.musicDir).Scan(&count)
 	return count, err
 }
