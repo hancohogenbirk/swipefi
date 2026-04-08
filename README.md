@@ -25,6 +25,7 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Fast library scanning (single-pass, optimized for network shares)
 - Automatic partial rescan after rejecting tracks
 - Scan cancellation when music directory changes
+- Play counts and deletion state preserved when switching music directories
 - Configurable music directory via in-app settings
 - Single Docker container, single binary
 - Auto-updates via Watchtower
