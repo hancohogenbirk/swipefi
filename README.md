@@ -168,10 +168,18 @@ Open `http://localhost:5173`. The Vite dev server proxies API calls to the Go ba
 
 ```bash
 cd web && npm run build && cd ..
-go build -o swipefi ./cmd/swipefi
+go build -ldflags="-s -w" -o swipefi ./cmd/swipefi
 ```
 
 The binary embeds the frontend and serves everything on port 8080.
+
+### Build Docker image
+
+```bash
+docker build -t swipefi .
+```
+
+The multi-stage Dockerfile builds the frontend, compiles a stripped Go binary, and compresses it with UPX for a minimal image.
 
 ### Run tests
 
