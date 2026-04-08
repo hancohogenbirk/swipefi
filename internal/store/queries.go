@@ -51,7 +51,7 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 // Uses existingPaths from the walk as a fast check, then does an os.Stat for any
 // candidate not in the map (handles transient walk errors over network filesystems).
 func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, []string, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0")
+	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0 AND music_dir = ?", musicDir)
 	if err != nil {
 		return 0, nil, fmt.Errorf("query tracks: %w", err)
 	}
