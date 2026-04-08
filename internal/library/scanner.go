@@ -206,6 +206,7 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 			DurationMs: meta.DurationMs,
 			Format:     meta.Format,
 			AddedAt:    meta.AddedAt,
+			MusicDir:   musicDir,
 		}
 
 		batch = append(batch, track)
@@ -338,6 +339,7 @@ func (sc *Scanner) ScanFolder(ctx context.Context, folder string) (int, error) {
 			DurationMs: meta.DurationMs,
 			Format:     meta.Format,
 			AddedAt:    meta.AddedAt,
+			MusicDir:   musicDir,
 		}
 
 		if err := sc.store.UpsertTrack(ctx, track); err != nil {
