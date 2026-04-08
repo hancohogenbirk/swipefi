@@ -96,7 +96,7 @@ func (sc *Scanner) MarkScanning() {
 	sc.status.Phase = "counting"
 }
 
-func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (int, error) {
+func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 	sc.mu.Lock()
 	if sc.scanCancel != nil {
 		sc.scanCancel()
@@ -239,36 +239,24 @@ func (sc *Scanner) Scan(ctx context.Context, force bool, purgeOrphans ...bool) (
 
 	// Handle tracks whose files no longer exist on disk
 	// Skip if walk found no files (likely mount not ready)
-	// NOTE: keep Scanning=true until cleanup is done — the purge/soft-delete
+	// NOTE: keep Scanning=true until cleanup is done — the soft-delete
 	// phase modifies the DB and track counts change during this time.
-	shouldPurge := len(purgeOrphans) > 0 && purgeOrphans[0]
 	var orphaned int
 	if count > 0 {
 		sc.mu.Lock()
 		sc.status.Phase = "cleanup"
 		sc.mu.Unlock()
-		if shouldPurge {
-			// Music dir changed — hard-delete old tracks (don't pollute deletion UI)
-			var purgeErr error
-			orphaned, purgeErr = sc.store.PurgeMissingTracks(scanCtx, existingPaths)
-			if purgeErr != nil {
-				slog.Warn("purge orphaned tracks failed", "err", purgeErr)
-			} else if orphaned > 0 {
-				slog.Info("purged orphaned tracks from old directory", "count", orphaned)
-			}
-		} else {
-			// Normal rescan — soft-delete missing tracks (user can restore)
-			var deletedPaths []string
-			var markErr error
-			orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
-			if markErr != nil {
-				slog.Warn("cleanup orphaned tracks failed", "err", markErr)
-			} else if orphaned > 0 {
-				slog.Info("marked orphaned tracks as deleted", "count", orphaned)
-				for _, p := range deletedPaths {
-					dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
-					CleanupEmptyDirs(dir, musicDir)
-				}
+		// Normal rescan — soft-delete missing tracks (user can restore)
+		var deletedPaths []string
+		var markErr error
+		orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
+		if markErr != nil {
+			slog.Warn("cleanup orphaned tracks failed", "err", markErr)
+		} else if orphaned > 0 {
+			slog.Info("marked orphaned tracks as deleted", "count", orphaned)
+			for _, p := range deletedPaths {
+				dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
+				CleanupEmptyDirs(dir, musicDir)
 			}
 		}
 	}
