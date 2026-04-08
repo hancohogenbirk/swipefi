@@ -410,7 +410,9 @@ func (p *Player) Reject(ctx context.Context) error {
 	slog.Info("rejected track", "path", track.Path)
 
 	// Mark deleted in DB
-	p.store.MarkDeleted(ctx, track.ID)
+	if err := p.store.MarkDeleted(ctx, track.ID); err != nil {
+		slog.Warn("failed to mark track deleted in db", "track_id", track.ID, "err", err)
+	}
 
 	// Remove from queue and play next
 	p.queue.RemoveCurrent()
@@ -489,7 +491,9 @@ func (p *Player) checkPlayCountLocked(ctx context.Context, force bool) {
 	if shouldCount {
 		track := p.queue.Current()
 		if track != nil {
-			p.store.IncrementPlayCount(ctx, track.ID)
+			if err := p.store.IncrementPlayCount(ctx, track.ID); err != nil {
+				slog.Warn("failed to increment play count", "track_id", track.ID, "err", err)
+			}
 			track.PlayCount++
 			if p.queue != nil {
 				p.queue.UpdateCurrentPlayCount(track.PlayCount)
