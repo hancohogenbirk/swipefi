@@ -8,6 +8,7 @@
 
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing');
+  let idle = $derived(ps.state === 'idle');
 
   async function togglePlay() {
     try {
@@ -54,17 +55,17 @@
   }
 </script>
 
-<div class="transport">
-  <button class="transport-btn" onclick={prev} aria-label="Previous">
+<div class="transport" class:disabled={idle}>
+  <button class="transport-btn" onclick={prev} aria-label="Previous" disabled={idle}>
     <SkipBack size={28} />
   </button>
 
-  <button class="transport-btn skip-btn" onclick={skipBack15} aria-label="Back 15 seconds">
+  <button class="transport-btn skip-btn" onclick={skipBack15} aria-label="Back 15 seconds" disabled={idle}>
     <RotateCcw size={32} />
     <span class="skip-label">15</span>
   </button>
 
-  <button class="play-pause-btn" onclick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
+  <button class="play-pause-btn" onclick={togglePlay} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={idle}>
     {#if isPlaying}
       <Pause size={36} fill="currentColor" />
     {:else}
@@ -72,12 +73,12 @@
     {/if}
   </button>
 
-  <button class="transport-btn skip-btn" onclick={skipForward15} aria-label="Forward 15 seconds">
+  <button class="transport-btn skip-btn" onclick={skipForward15} aria-label="Forward 15 seconds" disabled={idle}>
     <RotateCw size={32} />
     <span class="skip-label">15</span>
   </button>
 
-  <button class="transport-btn" onclick={next} aria-label="Next">
+  <button class="transport-btn" onclick={next} aria-label="Next" disabled={idle}>
     <SkipForward size={28} />
   </button>
 </div>
@@ -137,5 +138,10 @@
 
   .play-pause-btn:hover {
     transform: scale(1.05);
+  }
+
+  .transport.disabled {
+    opacity: 0.3;
+    pointer-events: none;
   }
 </style>
