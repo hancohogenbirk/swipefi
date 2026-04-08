@@ -20,6 +20,7 @@
   let error = $state('');
   let scrollPositions = new Map<string, number>();
   let listEl = $state<HTMLElement | null>(null);
+  let baseFolderName = $state('');
 
   let pathParts = $derived(
     currentPath ? currentPath.split('/') : []
@@ -108,11 +109,25 @@
     if (refreshSignal > lastRefreshSignal) {
       lastRefreshSignal = refreshSignal;
       loadFolders(currentPath);
+      loadBaseFolderName();
     }
   });
 
+  async function loadBaseFolderName() {
+    try {
+      const config = await api.config();
+      if (config.music_dir) {
+        const parts = config.music_dir.replace(/\/+$/, '').split('/');
+        baseFolderName = parts[parts.length - 1] || config.music_dir;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   // Load root on mount
   loadFolders('');
+  loadBaseFolderName();
 </script>
 
 <div class="folder-nav">
@@ -124,6 +139,8 @@
           <span class="separator">/</span>
           <button class="crumb" onclick={() => navigateToBreadcrumb(i)}>{part}</button>
         {/each}
+      {:else if baseFolderName}
+        <span class="base-folder-label">{baseFolderName}</span>
       {/if}
     </div>
     <div class="header-actions">
@@ -233,6 +250,13 @@
   .separator {
     color: #666;
     font-size: 0.8rem;
+  }
+
+  .base-folder-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    padding: 0.25rem 0.5rem;
   }
 
   .header-actions {
