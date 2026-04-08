@@ -113,10 +113,16 @@ func (s *Store) migrateMusicDir() error {
 	}
 
 	// Recreate indexes (may have been dropped with the table)
-	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_music_dir ON tracks(music_dir)")
-	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count)")
-	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at)")
-	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)")
+	for _, idx := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_tracks_music_dir ON tracks(music_dir)",
+		"CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count)",
+		"CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at)",
+		"CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)",
+	} {
+		if _, err := s.db.Exec(idx); err != nil {
+			slog.Warn("failed to create index", "sql", idx, "err", err)
+		}
+	}
 
 	return nil
 }
