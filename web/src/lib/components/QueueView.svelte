@@ -55,7 +55,7 @@
     if (!listEl) return;
     const currentEl = listEl.querySelector('.queue-item.current') as HTMLElement;
     if (currentEl) {
-      currentEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+      currentEl.scrollIntoView({ block: 'center', behavior: 'instant' });
     }
   }
 
