@@ -4,21 +4,31 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
 	db       *sql.DB
+	mu       sync.RWMutex
 	musicDir string
 }
 
 func (s *Store) SetMusicDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.musicDir = dir
 }
 
-func (s *Store) MusicDir() string {
+func (s *Store) getMusicDir() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.musicDir
+}
+
+func (s *Store) MusicDir() string {
+	return s.getMusicDir()
 }
 
 func New(dbPath string) (*Store, error) {
