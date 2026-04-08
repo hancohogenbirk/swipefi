@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { updateState, setPlayerLoading } from '../stores/player.svelte';
@@ -17,12 +18,14 @@
   let trackCount = $state(0);
   let loading = $state(false);
   let error = $state('');
+  let scrollPositions = new Map<string, number>();
+  let listEl = $state<HTMLElement | null>(null);
 
   let pathParts = $derived(
     currentPath ? currentPath.split('/') : []
   );
 
-  async function loadFolders(path: string) {
+  async function loadFolders(path: string, restoreScroll = false) {
     loading = true;
     error = '';
     try {
@@ -37,6 +40,14 @@
       error = e instanceof Error ? e.message : 'Failed to load folders';
     } finally {
       loading = false;
+    }
+
+    if (restoreScroll) {
+      await tick();
+      const savedScroll = scrollPositions.get(path);
+      if (listEl && savedScroll !== undefined) {
+        listEl.scrollTop = savedScroll;
+      }
     }
   }
 
@@ -53,6 +64,9 @@
   }
 
   function navigateTo(path: string) {
+    if (listEl) {
+      scrollPositions.set(currentPath, listEl.scrollTop);
+    }
     loadFolders(path);
     onFolderNavigate?.(path);
   }
@@ -60,10 +74,13 @@
   function navigateUp() {
     const parts = currentPath.split('/');
     parts.pop();
-    loadFolders(parts.join('/'));
+    loadFolders(parts.join('/'), true);
   }
 
   function navigateToBreadcrumb(index: number) {
+    if (listEl) {
+      scrollPositions.set(currentPath, listEl.scrollTop);
+    }
     const path = pathParts.slice(0, index + 1).join('/');
     loadFolders(path);
     onFolderNavigate?.(path);
@@ -134,7 +151,7 @@
   {#if loading}
     <div class="loading">Loading...</div>
   {:else}
-    <div class="folder-list">
+    <div class="folder-list" bind:this={listEl}>
       {#if currentPath}
         <button class="folder-item" onclick={navigateUp}>
           <span class="folder-icon"><ArrowUp size={20} /></span>
