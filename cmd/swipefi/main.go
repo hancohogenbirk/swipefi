@@ -74,6 +74,12 @@ func run() error {
 	// Library scanner (music dir may be empty on first run)
 	scanner := library.NewScanner(musicDir, s)
 
+	if musicDir != "" {
+		if err := s.BackfillMusicDir(musicDir); err != nil {
+			slog.Warn("backfill music_dir failed", "err", err)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

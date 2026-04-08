@@ -55,6 +55,17 @@ func (s *Store) migrateMusicDir() error {
 	return nil
 }
 
+func (s *Store) BackfillMusicDir(musicDir string) error {
+	if musicDir == "" {
+		return nil
+	}
+	_, err := s.db.Exec("UPDATE tracks SET music_dir = ? WHERE music_dir = ''", musicDir)
+	if err != nil {
+		return fmt.Errorf("backfill music_dir: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) migrate() error {
 	slog.Info("running database migrations")
 	_, err := s.db.Exec(`
