@@ -8,12 +8,14 @@ RUN npm run build
 
 # Stage 2: Build Go binary with embedded frontend
 FROM golang:1.26-alpine AS backend
+RUN apk add --no-cache upx
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /build/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -o /swipefi ./cmd/swipefi
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /swipefi ./cmd/swipefi && \
+    upx --best --lzma /swipefi
 
 # Stage 3: Minimal runtime
 FROM alpine:3.21
