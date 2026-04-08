@@ -9,7 +9,7 @@
   let pendingSeekMs = $state<number | null>(null);
 
   let ps = $derived(getPlayerState());
-  let idle = $derived(ps.state === 'idle' && !ps.track);
+  let idle = $derived(ps.state === 'idle');
 
   let positionMs = $derived(
     idle ? 0 :

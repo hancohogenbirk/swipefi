@@ -71,7 +71,7 @@ export function disconnectWebSocket() {
 export async function loadInitialState() {
   try {
     const s = await api.playerState();
-    state = s;
+    updateState(s);
   } catch {
     // Server might not be ready yet
   }
