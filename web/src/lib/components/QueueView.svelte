@@ -35,6 +35,7 @@
   let touchStartY = $state(0);
   let touchCurrentY = $state(0);
   let itemHeight = 56;
+  let dragScrollStart = 0;
 
   async function loadQueue() {
     loading = true;
@@ -104,7 +105,7 @@
     holdTimer = setTimeout(() => {
       isDragging = true;
       dragIndex = idx;
-      // Haptic feedback if available
+      dragScrollStart = listEl?.scrollTop ?? 0;
       if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
     }, HOLD_DELAY_MS);
   }
@@ -126,14 +127,16 @@
     // Auto-scroll when dragging near top/bottom edge of visible list
     handleEdgeScroll(touch.clientY);
 
-    // Calculate which index we're hovering over
-    const delta = touchCurrentY - touchStartY;
+    // Calculate which index we're hovering over, accounting for container scroll
+    const scrollDelta = (listEl?.scrollTop ?? 0) - dragScrollStart;
+    const delta = (touchCurrentY - touchStartY) + scrollDelta;
     const indexOffset = Math.round(delta / itemHeight);
     const targetIdx = Math.max(0, Math.min(tracks.length - 1, dragIndex + indexOffset));
 
     if (targetIdx !== dragIndex) {
       dragIndex = moveTrack(dragIndex, targetIdx)!;
-      touchStartY = touchCurrentY; // Reset reference point
+      touchStartY = touchCurrentY;
+      dragScrollStart = listEl?.scrollTop ?? 0;
       dragOverIndex = dragIndex;
     }
   }
