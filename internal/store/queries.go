@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -87,12 +88,19 @@ func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[stri
 		}
 		defer tx.Rollback()
 
-		stmt, _ := tx.PrepareContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?")
+		stmt, err := tx.PrepareContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?")
+		if err != nil {
+			return 0, nil, fmt.Errorf("prepare mark deleted: %w", err)
+		}
 		defer stmt.Close()
 		for _, id := range toDelete {
-			stmt.ExecContext(ctx, id)
+			if _, err := stmt.ExecContext(ctx, id); err != nil {
+				slog.Warn("failed to mark track deleted", "id", id, "err", err)
+			}
 		}
-		tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return 0, nil, fmt.Errorf("commit mark deleted: %w", err)
+		}
 	}
 
 	return len(toDelete), deletedPaths, nil
