@@ -9,13 +9,15 @@
   let pendingSeekMs = $state<number | null>(null);
 
   let ps = $derived(getPlayerState());
+  let idle = $derived(ps.state === 'idle' && !ps.track);
 
   let positionMs = $derived(
+    idle ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
     ps.position_ms
   );
-  let durationMs = $derived(ps.duration_ms || 1);
+  let durationMs = $derived(idle ? 1 : (ps.duration_ms || 1));
   let progress = $derived(Math.min((positionMs / durationMs) * 100, 100));
 
   // Clear pending seek when WS position catches up (within 3s tolerance)
@@ -33,6 +35,7 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
+    if (idle) return;
     seeking = true;
     updateSeekValue(e);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -59,7 +62,7 @@
   }
 </script>
 
-<div class="progress-container">
+<div class="progress-container" class:disabled={idle}>
   <span class="time elapsed">{formatTime(positionMs)}</span>
   <div
     class="progress-bar"
@@ -141,5 +144,10 @@
     transform: translateX(-50%);
     pointer-events: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .progress-container.disabled {
+    opacity: 0.3;
+    pointer-events: none;
   }
 </style>
