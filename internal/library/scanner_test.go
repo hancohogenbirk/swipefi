@@ -20,6 +20,7 @@ func setupScannerTest(t *testing.T) (string, *store.Store, *Scanner) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.SetMusicDir(musicDir)
 	t.Cleanup(func() { s.Close() })
 
 	sc := NewScanner(musicDir, s)
@@ -164,16 +165,17 @@ func TestScan_MissingFilesSoftDeleted(t *testing.T) {
 	}
 }
 
-// TestScan_SwitchMusicDir_PurgesOldTracks is the key regression test.
-// It verifies that switching music directories purges old tracks from the DB
-// entirely (hard delete) rather than soft-deleting them into the deletion UI.
-func TestScan_SwitchMusicDir_PurgesOldTracks(t *testing.T) {
+// TestScan_SwitchMusicDir_PreservesPlayCounts verifies that switching music
+// directories preserves play counts and old tracks in the DB. The music_dir
+// scoping ensures only current-dir tracks appear in queries.
+func TestScan_SwitchMusicDir_PreservesPlayCounts(t *testing.T) {
 	_, s, sc := setupScannerTest(t)
 	ctx := context.Background()
 
 	// Set up first music dir with tracks
 	dirA := t.TempDir()
 	sc.SetMusicDir(dirA)
+	s.SetMusicDir(dirA)
 	createAudioFile(t, dirA, "ArtistA/AlbumA/SongA.flac")
 	createAudioFile(t, dirA, "ArtistA/AlbumA/SongB.flac")
 
@@ -192,10 +194,10 @@ func TestScan_SwitchMusicDir_PurgesOldTracks(t *testing.T) {
 	// Switch to a completely different music dir
 	dirB := t.TempDir()
 	sc.SetMusicDir(dirB)
+	s.SetMusicDir(dirB)
 	createAudioFile(t, dirB, "ArtistB/AlbumB/SongC.flac")
 
-	// Scan with purgeOrphans=true (simulates music dir change)
-	count, err := sc.Scan(ctx, false, true)
+	count, err := sc.Scan(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,16 +205,7 @@ func TestScan_SwitchMusicDir_PurgesOldTracks(t *testing.T) {
 		t.Errorf("expected 1 track scanned from dir B, got %d", count)
 	}
 
-	// KEY ASSERTION: Old tracks should be PURGED (not in deleted list)
-	deleted, err := s.ListDeleted(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(deleted) != 0 {
-		t.Errorf("expected 0 soft-deleted tracks after dir switch, got %d (old tracks should be purged, not soft-deleted)", len(deleted))
-	}
-
-	// Only new dir tracks should remain
+	// Only dir B tracks visible via scoped queries
 	active, err := s.TrackCount(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -220,51 +213,36 @@ func TestScan_SwitchMusicDir_PurgesOldTracks(t *testing.T) {
 	if active != 1 {
 		t.Errorf("expected 1 active track from dir B, got %d", active)
 	}
-}
 
-// TestScan_SwitchMusicDir_PreservesMatchingPlayCounts verifies that when
-// switching to a dir that has tracks with the same relative paths, play
-// counts are preserved.
-func TestScan_SwitchMusicDir_PreservesMatchingPlayCounts(t *testing.T) {
-	_, s, sc := setupScannerTest(t)
-	ctx := context.Background()
+	// No deleted tracks in dir B
+	deleted, err := s.ListDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 0 {
+		t.Errorf("expected 0 deleted tracks in dir B, got %d", len(deleted))
+	}
 
-	// Set up first music dir
-	dirA := t.TempDir()
+	// Switch back to dir A — play counts should be preserved
 	sc.SetMusicDir(dirA)
-	createAudioFile(t, dirA, "Artist/Album/Song.flac")
-
+	s.SetMusicDir(dirA)
 	if _, err := sc.Scan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
 
-	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
-	s.IncrementPlayCount(ctx, tracks[0].ID)
-	s.IncrementPlayCount(ctx, tracks[0].ID)
-	s.IncrementPlayCount(ctx, tracks[0].ID)
-
-	// Switch to dir B with SAME relative path structure
-	dirB := t.TempDir()
-	sc.SetMusicDir(dirB)
-	createAudioFile(t, dirB, "Artist/Album/Song.flac")
-
-	if _, err := sc.Scan(ctx, false, true); err != nil {
-		t.Fatal(err)
+	tracksBack, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	if len(tracksBack) != 2 {
+		t.Fatalf("expected 2 tracks back in dir A, got %d", len(tracksBack))
 	}
 
-	// Play count should be preserved (same relative path)
-	tracksB, _ := s.ListTracks(ctx, "", "added_at", "asc")
-	if len(tracksB) != 1 {
-		t.Fatalf("expected 1 track, got %d", len(tracksB))
-	}
-	if tracksB[0].PlayCount != 3 {
-		t.Errorf("expected play_count=3 preserved across dir switch, got %d", tracksB[0].PlayCount)
+	got, _ := s.GetTrack(ctx, tracksA[0].ID)
+	if got.PlayCount != 1 {
+		t.Errorf("expected play_count=1 preserved after switching back, got %d", got.PlayCount)
 	}
 }
 
-// TestScan_SwitchMusicDir_NoSoftDeletePollution is the exact regression scenario.
-// Switch from dir A to dir B, then back to dir A. At no point should the
-// deletion UI show tracks from the other directory.
+// TestScan_SwitchMusicDir_NoSoftDeletePollution verifies that switching
+// directories never shows old-dir tracks in the deletion UI.
 func TestScan_SwitchMusicDir_NoSoftDeletePollution(t *testing.T) {
 	_, s, sc := setupScannerTest(t)
 	ctx := context.Background()
@@ -278,6 +256,7 @@ func TestScan_SwitchMusicDir_NoSoftDeletePollution(t *testing.T) {
 
 	// Scan dir A
 	sc.SetMusicDir(dirA)
+	s.SetMusicDir(dirA)
 	if _, err := sc.Scan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
@@ -287,34 +266,36 @@ func TestScan_SwitchMusicDir_NoSoftDeletePollution(t *testing.T) {
 		t.Fatalf("expected 2 tracks from dir A, got %d", countA)
 	}
 
-	// Switch to dir B (purge orphans)
+	// Switch to dir B
 	sc.SetMusicDir(dirB)
-	if _, err := sc.Scan(ctx, false, true); err != nil {
+	s.SetMusicDir(dirB)
+	if _, err := sc.Scan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
 
 	deleted, _ := s.ListDeleted(ctx)
 	if len(deleted) != 0 {
-		t.Errorf("after switch A→B: expected 0 deleted, got %d", len(deleted))
+		t.Errorf("after switch A->B: expected 0 deleted, got %d", len(deleted))
 	}
 	countB, _ := s.TrackCount(ctx)
 	if countB != 1 {
-		t.Errorf("after switch A→B: expected 1 active track, got %d", countB)
+		t.Errorf("after switch A->B: expected 1 active track, got %d", countB)
 	}
 
-	// Switch back to dir A (purge orphans)
+	// Switch back to dir A
 	sc.SetMusicDir(dirA)
-	if _, err := sc.Scan(ctx, false, true); err != nil {
+	s.SetMusicDir(dirA)
+	if _, err := sc.Scan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
 
 	deleted, _ = s.ListDeleted(ctx)
 	if len(deleted) != 0 {
-		t.Errorf("after switch B→A: expected 0 deleted, got %d", len(deleted))
+		t.Errorf("after switch B->A: expected 0 deleted, got %d", len(deleted))
 	}
 	countBack, _ := s.TrackCount(ctx)
 	if countBack != 2 {
-		t.Errorf("after switch B→A: expected 2 active tracks, got %d", countBack)
+		t.Errorf("after switch B->A: expected 2 active tracks, got %d", countBack)
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const testMusicDir = "/test/music"
+
 func setupTestStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -16,6 +18,7 @@ func setupTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.SetMusicDir(testMusicDir)
 	t.Cleanup(func() { s.Close() })
 	return s
 }
@@ -29,6 +32,7 @@ func newTrack(path, title, artist, album string) *Track {
 		DurationMs: 180000,
 		Format:     "flac",
 		AddedAt:    time.Now().Unix(),
+		MusicDir:   testMusicDir,
 	}
 }
 
@@ -550,15 +554,22 @@ func TestMarkMissingAsDeleted_ReturnsPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Set the store's musicDir to match the real temp dir used by this test
+	s.SetMusicDir(musicDir)
+
 	realFile := filepath.Join(musicDir, "sub", "exists.flac")
 	if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := s.UpsertTrack(ctx, newTrack("sub/exists.flac", "Exists", "", "")); err != nil {
+	existsTrack := newTrack("sub/exists.flac", "Exists", "", "")
+	existsTrack.MusicDir = musicDir
+	if err := s.UpsertTrack(ctx, existsTrack); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpsertTrack(ctx, newTrack("sub/gone.flac", "Gone", "", "")); err != nil {
+	goneTrack := newTrack("sub/gone.flac", "Gone", "", "")
+	goneTrack.MusicDir = musicDir
+	if err := s.UpsertTrack(ctx, goneTrack); err != nil {
 		t.Fatal(err)
 	}
 
@@ -575,59 +586,3 @@ func TestMarkMissingAsDeleted_ReturnsPaths(t *testing.T) {
 	}
 }
 
-func TestPurgeMissingTracks(t *testing.T) {
-	s := setupTestStore(t)
-	ctx := context.Background()
-
-	// Insert tracks: one matching new dir, one active from old dir, one soft-deleted from old dir
-	if err := s.UpsertTrack(ctx, newTrack("sub/new.flac", "New", "", "")); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.UpsertTrack(ctx, newTrack("old/active.flac", "OldActive", "", "")); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.UpsertTrack(ctx, newTrack("old/rejected.flac", "OldRejected", "", "")); err != nil {
-		t.Fatal(err)
-	}
-
-	// Mark one old track as soft-deleted (simulates a rejected/swiped-left track)
-	allTracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
-	for _, tr := range allTracks {
-		if tr.Title == "OldRejected" {
-			s.MarkDeleted(ctx, tr.ID)
-		}
-	}
-
-	// Verify soft-deleted track exists in deletion list
-	deleted, _ := s.ListDeleted(ctx)
-	if len(deleted) != 1 {
-		t.Fatalf("expected 1 soft-deleted before purge, got %d", len(deleted))
-	}
-
-	existing := map[string]bool{"sub/new.flac": true}
-	purged, err := s.PurgeMissingTracks(ctx, existing)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if purged != 2 {
-		t.Errorf("expected 2 purged (1 active + 1 soft-deleted), got %d", purged)
-	}
-
-	// Both old tracks should be completely gone — including the soft-deleted one
-	deleted, err = s.ListDeleted(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(deleted) != 0 {
-		t.Errorf("expected 0 deleted tracks after purge, got %d", len(deleted))
-	}
-
-	// Only the new track should remain
-	count, err := s.TrackCount(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 remaining track, got %d", count)
-	}
-}
