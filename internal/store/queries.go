@@ -28,6 +28,18 @@ type Track struct {
 
 var ErrTrackNotFound = errors.New("track not found")
 
+// validSortColumns and validOrderDirs whitelist allowed ORDER BY values
+// to prevent any possibility of SQL injection via sort parameters.
+var validSortColumns = map[string]string{
+	"added_at":   "added_at",
+	"play_count": "play_count",
+}
+
+var validOrderDirs = map[string]string{
+	"asc":  "ASC",
+	"desc": "DESC",
+}
+
 func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx, `
@@ -172,17 +184,17 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 		args = append(args, folder+"/%")
 	}
 
-	sortCol := "added_at"
-	if sortBy == "play_count" {
-		sortCol = "play_count"
+	sortCol := validSortColumns[sortBy]
+	if sortCol == "" {
+		sortCol = "added_at"
 	}
 
-	orderDir := "ASC"
-	if order == "desc" {
-		orderDir = "DESC"
+	orderDir := validOrderDirs[order]
+	if orderDir == "" {
+		orderDir = "ASC"
 	}
 
-	query += fmt.Sprintf(" ORDER BY %s %s", sortCol, orderDir)
+	query += " ORDER BY " + sortCol + " " + orderDir
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -219,17 +231,17 @@ func (s *Store) ListTracksDirectOnly(ctx context.Context, folder, sortBy, order 
 		query += " AND path NOT LIKE '%/%'"
 	}
 
-	sortCol := "added_at"
-	if sortBy == "play_count" {
-		sortCol = "play_count"
+	sortCol := validSortColumns[sortBy]
+	if sortCol == "" {
+		sortCol = "added_at"
 	}
 
-	orderDir := "ASC"
-	if order == "desc" {
-		orderDir = "DESC"
+	orderDir := validOrderDirs[order]
+	if orderDir == "" {
+		orderDir = "ASC"
 	}
 
-	query += fmt.Sprintf(" ORDER BY %s %s", sortCol, orderDir)
+	query += " ORDER BY " + sortCol + " " + orderDir
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
