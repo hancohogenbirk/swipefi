@@ -49,7 +49,9 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) DisconnectDevice(w http.ResponseWriter, r *http.Request) {
 	a.player.Disconnect(r.Context())
-	a.store.SetConfig(store.ConfigKeyDeviceUDN, "")
+	if err := a.store.SetConfig(store.ConfigKeyDeviceUDN, ""); err != nil {
+		slog.Warn("failed to clear device UDN config", "err", err)
+	}
 	slog.Info("device disconnected")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
