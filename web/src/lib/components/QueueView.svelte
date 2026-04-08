@@ -222,7 +222,7 @@
   {:else if tracks.length === 0}
     <div class="empty">Queue is empty</div>
   {:else}
-    <div class="queue-list" data-testid="queue-list" bind:this={listEl} class:no-scroll={isDragging}>
+    <div class="queue-list" data-testid="queue-list" bind:this={listEl}>
       {#each tracks as track, idx (track.id)}
         <div
           class="queue-item"
@@ -342,10 +342,6 @@
     flex-direction: column;
     gap: 1px;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .queue-list.no-scroll {
-    overflow-y: hidden;
   }
 
   .queue-item {
