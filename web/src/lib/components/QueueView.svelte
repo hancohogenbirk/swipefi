@@ -38,6 +38,8 @@
   let touchCurrentY = $state(0);
   let itemHeight = 56;
   let dragScrollStart = 0;
+  let dragDeltaY = $state(0);
+  let dragOriginY = $state(0);
 
   async function loadQueue(forceScroll = false) {
     loading = true;
@@ -114,6 +116,7 @@
     holdTimer = setTimeout(() => {
       isDragging = true;
       dragIndex = idx;
+      dragOriginY = touchStartY;
       dragScrollStart = listEl?.scrollTop ?? 0;
       if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
     }, HOLD_DELAY_MS);
@@ -132,6 +135,7 @@
     if (!isDragging || dragIndex === null) return;
     e.preventDefault();
     touchCurrentY = touch.clientY;
+    dragDeltaY = touch.clientY - dragOriginY;
 
     // Auto-scroll when dragging near top/bottom edge of visible list
     handleEdgeScroll(touch.clientY);
@@ -146,6 +150,7 @@
       const newIdx = moveTrack(dragIndex, targetIdx)!;
       dragIndex = newIdx;
       touchStartY = touchCurrentY;
+      dragOriginY = touchCurrentY;
       dragScrollStart = listEl?.scrollTop ?? 0;
       dragOverIndex = newIdx;
     }
@@ -180,6 +185,8 @@
       isDragging = false;
       dragIndex = null;
       dragOverIndex = null;
+      dragDeltaY = 0;
+      dragOriginY = 0;
       saveOrder();
     }
   }
@@ -243,6 +250,7 @@
           data-track-id={track.id}
           role="button"
           tabindex="0"
+          style={isDragging && dragIndex === idx ? `transform: translateY(${dragDeltaY}px); z-index: 10;` : ''}
           onclick={() => skipTo(track.id)}
           onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
           ontouchstart={(e) => handleTouchStart(e, idx)}
@@ -382,7 +390,6 @@
 
   .queue-item.dragging {
     background: #2a2a2a;
-    transform: scale(1.03);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     z-index: 10;
     border-radius: 12px;
