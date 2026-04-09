@@ -21,6 +21,8 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Cached cover art cleanup on permanent delete
 - External device takeover detection (transitions to idle when another app takes over)
 - Browser back button support with in-tab navigation
+- Loading indicator while DLNA renderer buffers a new track
+- Graceful track transitions (stops current before starting next)
 - DLNA connection retry on transient failures
 - Fast library scanning (single-pass, optimized for network shares)
 - Automatic partial rescan after rejecting tracks
