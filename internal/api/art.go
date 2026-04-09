@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -18,6 +19,7 @@ import (
 const (
 	artCacheSubdir = "art"
 	artCacheMaxAge = 86400 // 24 hours in seconds
+	noArtExpiry    = 7 * 24 * time.Hour
 )
 
 func (a *API) GetTrackArt(w http.ResponseWriter, r *http.Request) {
@@ -113,8 +115,15 @@ func readCachedArt(cacheDir string, trackID int64) ([]byte, string, error) {
 
 func hasNoArtMarker(cacheDir string, trackID int64) bool {
 	path := filepath.Join(cacheDir, fmt.Sprintf("%d.noart", trackID))
-	_, err := os.Stat(path)
-	return err == nil
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if time.Since(info.ModTime()) > noArtExpiry {
+		os.Remove(path)
+		return false
+	}
+	return true
 }
 
 func cacheNoArt(cacheDir string, trackID int64) {
