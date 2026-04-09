@@ -6,14 +6,16 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 const (
-	coverArtFetchTimeout = 10 * time.Second
-	mbMinConfidenceScore = 80
-	userAgent            = "SwipeFi/1.0 (https://github.com/hancohogenbirk/swipefi)"
+	coverArtFetchTimeout    = 10 * time.Second
+	mbMinConfidenceScore    = 80
+	mbFuzzyConfidenceScore  = 70
+	userAgent               = "SwipeFi/1.0 (https://github.com/hancohogenbirk/swipefi)"
 )
 
 var httpClient = &http.Client{
@@ -55,13 +57,18 @@ type mbSearchResult struct {
 	} `json:"releases"`
 }
 
-func searchMusicBrainz(artist, album string) (string, error) {
-	// Build URL manually — MusicBrainz Lucene query needs + for spaces, no encoding of : or AND
-	safeArtist := strings.ReplaceAll(artist, " ", "+")
-	safeAlbum := strings.ReplaceAll(album, " ", "+")
-	reqURL := fmt.Sprintf("https://musicbrainz.org/ws/2/release/?query=artist:%s+AND+release:%s&fmt=json&limit=1",
-		safeArtist, safeAlbum)
+// buildMusicBrainzURL constructs a structured Lucene query URL for the MusicBrainz API.
+// It uses url.QueryEscape for proper encoding, then converts %20 to + for readability.
+func buildMusicBrainzURL(artist, album string) string {
+	encArtist := strings.ReplaceAll(url.QueryEscape(artist), "%20", "+")
+	encAlbum := strings.ReplaceAll(url.QueryEscape(album), "%20", "+")
+	query := fmt.Sprintf("artist%%3A%s+AND+release%%3A%s", encArtist, encAlbum)
+	return fmt.Sprintf("https://musicbrainz.org/ws/2/release/?query=%s&fmt=json&limit=5", query)
+}
 
+// doMusicBrainzSearch performs a single search request and returns the best matching MBID
+// if the top result meets the minScore threshold.
+func doMusicBrainzSearch(reqURL string, minScore int) (string, error) {
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return "", err
@@ -83,12 +90,36 @@ func searchMusicBrainz(artist, album string) (string, error) {
 		return "", err
 	}
 
-	if len(result.Releases) == 0 || result.Releases[0].Score < mbMinConfidenceScore {
-		return "", nil // no good match
+	if len(result.Releases) == 0 || result.Releases[0].Score < minScore {
+		return "", nil
 	}
 
-	slog.Debug("musicbrainz match", "artist", artist, "album", album, "mbid", result.Releases[0].ID, "score", result.Releases[0].Score)
 	return result.Releases[0].ID, nil
+}
+
+func searchMusicBrainz(artist, album string) (string, error) {
+	// Try structured query first with high confidence threshold
+	structuredURL := buildMusicBrainzURL(artist, album)
+	mbid, err := doMusicBrainzSearch(structuredURL, mbMinConfidenceScore)
+	if err != nil {
+		return "", err
+	}
+	if mbid != "" {
+		slog.Debug("musicbrainz structured match", "artist", artist, "album", album, "mbid", mbid)
+		return mbid, nil
+	}
+
+	// Fuzzy fallback: simple combined query with lower confidence threshold
+	fuzzyQuery := strings.ReplaceAll(url.QueryEscape(artist+" "+album), "%20", "+")
+	fuzzyURL := fmt.Sprintf("https://musicbrainz.org/ws/2/release/?query=%s&fmt=json&limit=5", fuzzyQuery)
+	mbid, err = doMusicBrainzSearch(fuzzyURL, mbFuzzyConfidenceScore)
+	if err != nil {
+		return "", err
+	}
+	if mbid != "" {
+		slog.Debug("musicbrainz fuzzy match", "artist", artist, "album", album, "mbid", mbid)
+	}
+	return mbid, nil
 }
 
 func fetchFromCoverArtArchive(mbid string) ([]byte, error) {
