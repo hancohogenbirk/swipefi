@@ -21,10 +21,36 @@
   let scrollPositions = new Map<string, number>();
   let listEl = $state<HTMLElement | null>(null);
   let baseFolderName = $state('');
+  let scanStatus = $state<{ scanning: boolean; scanned: number; total: number; phase: string } | null>(null);
+  let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   let pathParts = $derived(
     currentPath ? currentPath.split('/') : []
   );
+
+  function startScanPolling() {
+    stopScanPolling();
+    scanPollTimer = setInterval(async () => {
+      try {
+        const status = await api.scanStatus();
+        scanStatus = status;
+        if (!status.scanning) {
+          stopScanPolling();
+          scanStatus = null;
+          await loadFolders(currentPath);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+  }
+
+  function stopScanPolling() {
+    if (scanPollTimer) {
+      clearInterval(scanPollTimer);
+      scanPollTimer = null;
+    }
+  }
 
   async function loadFolders(path: string, restoreScroll = false) {
     loading = true;
@@ -42,6 +68,20 @@
     } finally {
       loading = false;
     }
+
+    if (folders.length === 0 && tracks.length === 0) {
+      try {
+        const status = await api.scanStatus();
+        if (status.scanning) {
+          scanStatus = status;
+          startScanPolling();
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    scanStatus = null;
 
     if (restoreScroll) {
       await tick();
@@ -126,6 +166,11 @@
     }
   }
 
+  // Clean up poll timer on destroy
+  $effect(() => {
+    return () => stopScanPolling();
+  });
+
   // Load root on mount
   loadFolders('');
   loadBaseFolderName();
@@ -166,7 +211,15 @@
     </button>
   {/if}
 
-  {#if loading}
+  {#if scanStatus?.scanning}
+    <div class="scan-progress">
+      <p>Scanning library...</p>
+      <div class="scan-bar">
+        <div class="scan-fill" style="width: {scanStatus.total > 0 ? (scanStatus.scanned / scanStatus.total * 100) : 0}%"></div>
+      </div>
+      <p class="scan-count">{scanStatus.scanned.toLocaleString()} / {scanStatus.total.toLocaleString()} files</p>
+    </div>
+  {:else if loading}
     <div class="loading">Loading...</div>
   {:else}
     <div class="folder-list" bind:this={listEl}>
@@ -393,6 +446,36 @@
   .track-meta {
     font-size: 0.7rem;
     color: #666;
+  }
+
+  .scan-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    color: var(--color-text-secondary);
+  }
+
+  .scan-bar {
+    width: 100%;
+    max-width: 300px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .scan-fill {
+    height: 100%;
+    background: var(--color-accent, #1db954);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .scan-count {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
   }
 
   .loading, .empty, .error {
