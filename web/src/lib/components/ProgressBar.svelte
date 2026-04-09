@@ -63,7 +63,6 @@
 </script>
 
 <div class="progress-container" class:disabled={idle}>
-  <span class="time elapsed">{formatTime(positionMs)}</span>
   <div
     class="progress-bar"
     role="slider"
@@ -79,35 +78,20 @@
     <div class="progress-fill" style="width: {progress}%"></div>
     <div class="progress-thumb" style="left: {progress}%"></div>
   </div>
-  <span class="time remaining">-{formatTime(durationMs - positionMs)}</span>
+  <div class="time-row">
+    <span class="time elapsed">{formatTime(positionMs)}</span>
+    <span class="time remaining">-{formatTime(durationMs - positionMs)}</span>
+  </div>
 </div>
 
 <style>
   .progress-container {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
     width: 100%;
     padding: 0 1rem;
   }
 
-  .time {
-    font-size: 0.75rem;
-    color: #999;
-    min-width: 3rem;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .elapsed {
-    text-align: right;
-  }
-
-  .remaining {
-    text-align: left;
-  }
-
   .progress-bar {
-    flex: 1;
+    width: 100%;
     height: 24px;
     display: flex;
     align-items: center;
@@ -144,6 +128,18 @@
     transform: translateX(-50%);
     pointer-events: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .time-row {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 0.25rem;
+  }
+
+  .time {
+    font-size: 0.75rem;
+    color: #999;
+    font-variant-numeric: tabular-nums;
   }
 
   .progress-container.disabled {
