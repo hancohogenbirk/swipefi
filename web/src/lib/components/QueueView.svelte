@@ -6,7 +6,8 @@
 
   const HOLD_DELAY_MS = 250;
   const HAPTIC_DURATION_MS = 30;
-  const DRAG_JITTER_PX = 10;
+  const DRAG_JITTER_PX = 20;
+  const SCROLL_SUPPRESS_MS = 3000;
 
   let { onBack }: { onBack: () => void } = $props();
 
@@ -18,6 +19,7 @@
   let currentTrackId = $derived(ps.track?.id);
 
   let lastTrackId = $state<number | undefined>(undefined);
+  let userScrolledAt = $state(0);
 
   $effect(() => {
     const currentId = ps.track?.id;
@@ -37,7 +39,7 @@
   let itemHeight = 56;
   let dragScrollStart = 0;
 
-  async function loadQueue() {
+  async function loadQueue(forceScroll = false) {
     loading = true;
     try {
       const q = await api.queue();
@@ -48,12 +50,13 @@
     } finally {
       loading = false;
     }
-    scrollToCurrent();
+    scrollToCurrent(forceScroll);
   }
 
-  async function scrollToCurrent() {
+  async function scrollToCurrent(force = false) {
     await tick();
     if (!listEl) return;
+    if (!force && Date.now() - userScrolledAt < SCROLL_SUPPRESS_MS) return;
     const currentEl = listEl.querySelector('.queue-item.current') as HTMLElement;
     if (currentEl) {
       currentEl.scrollIntoView({ block: 'center', behavior: 'instant' });
@@ -65,7 +68,7 @@
     try {
       const s = await api.skipTo(trackId);
       updateState(s);
-      await loadQueue();
+      await loadQueue(true);
     } catch (e) {
       console.error('[swipefi] skip to failed:', e);
     }
@@ -97,9 +100,15 @@
     touchStartY = touch.clientY;
     touchCurrentY = touch.clientY;
 
-    // Measure item height
-    const el = (e.currentTarget as HTMLElement);
-    if (el) itemHeight = el.offsetHeight + 1; // +1 for gap
+    // Measure item height from DOM distance between first two children
+    if (listEl && listEl.children.length >= 2) {
+      const first = listEl.children[0] as HTMLElement;
+      const second = listEl.children[1] as HTMLElement;
+      itemHeight = second.offsetTop - first.offsetTop;
+    } else {
+      const el = (e.currentTarget as HTMLElement);
+      if (el) itemHeight = el.offsetHeight + 1;
+    }
 
     // Start hold timer for long-press
     holdTimer = setTimeout(() => {
@@ -134,10 +143,11 @@
     const targetIdx = Math.max(0, Math.min(tracks.length - 1, dragIndex + indexOffset));
 
     if (targetIdx !== dragIndex) {
-      dragIndex = moveTrack(dragIndex, targetIdx)!;
+      const newIdx = moveTrack(dragIndex, targetIdx)!;
+      dragIndex = newIdx;
       touchStartY = touchCurrentY;
       dragScrollStart = listEl?.scrollTop ?? 0;
-      dragOverIndex = dragIndex;
+      dragOverIndex = newIdx;
     }
   }
 
@@ -199,7 +209,7 @@
     }
   }
 
-  loadQueue();
+  loadQueue(true);
 </script>
 
 <div class="queue-view">
@@ -222,7 +232,7 @@
   {:else if tracks.length === 0}
     <div class="empty">Queue is empty</div>
   {:else}
-    <div class="queue-list" data-testid="queue-list" bind:this={listEl}>
+    <div class="queue-list" data-testid="queue-list" bind:this={listEl} onscroll={() => { if (!isDragging) userScrolledAt = Date.now(); }}>
       {#each tracks as track, idx (track.id)}
         <div
           class="queue-item"
