@@ -48,12 +48,38 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate config: %w", err)
 	}
-	if err := s.migrateMusicDir(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate music_dir: %w", err)
+
+	version, _ := s.getSchemaVersion()
+
+	if version < 1 {
+		if err := s.migrateMusicDir(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate music_dir: %w", err)
+		}
+		if err := s.setSchemaVersion(1); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set schema version: %w", err)
+		}
 	}
 
 	return s, nil
+}
+
+func (s *Store) getSchemaVersion() (int, error) {
+	var v int
+	err := s.db.QueryRow("SELECT value FROM config WHERE key = 'schema_version'").Scan(&v)
+	if err != nil {
+		return 0, nil // no row = version 0
+	}
+	return v, nil
+}
+
+func (s *Store) setSchemaVersion(v int) error {
+	_, err := s.db.Exec(`
+		INSERT INTO config (key, value) VALUES ('schema_version', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, v)
+	return err
 }
 
 func (s *Store) Close() error {
