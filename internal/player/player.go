@@ -20,6 +20,7 @@ type State string
 
 const (
 	StateIdle    State = "idle"
+	StateLoading State = "loading"
 	StatePlaying State = "playing"
 	StatePaused  State = "paused"
 )
@@ -59,6 +60,10 @@ type Player struct {
 	playStartTime  time.Time
 	accumulatedMs  int64
 	playCounted    bool
+
+	// Timestamp when playCurrentLocked last called Play() on the renderer.
+	// Used to suppress false "track ended" detections during renderer startup.
+	playStartedAt time.Time
 
 	// Expected stream URL for the current track
 	currentStreamURL string
@@ -190,6 +195,14 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 		return nil
 	}
 
+	// Stop current playback first — DLNA renderers can get confused
+	// when receiving a new URI while still playing/buffering another.
+	if p.transport != nil && (p.state == StatePlaying || p.state == StatePaused || p.state == StateLoading) {
+		p.stopPollingLocked()
+		p.transport.Stop(ctx)
+		time.Sleep(200 * time.Millisecond)
+	}
+
 	streamURL := fmt.Sprintf("http://%s:%s/stream/%s", p.localIP, p.port, track.Path)
 	p.currentStreamURL = streamURL
 	slog.Info("playing track", "title", track.Title, "artist", track.Artist, "url", streamURL)
@@ -204,17 +217,22 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	// Build DIDL-Lite metadata so the renderer shows track info and art
 	metadata := buildDIDLMetadata(track, streamURL, artURL)
 
-	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
-	if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
-		return err
-	}
-
-	p.state = StatePlaying
+	// Set state to loading BEFORE sending Play command
+	p.state = StateLoading
 	p.positionMs = 0
 	p.durationMs = 0
 	p.playStartTime = time.Now()
 	p.accumulatedMs = 0
 	p.playCounted = false
+	p.notify()
+
+	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
+	if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
+		slog.Error("play failed after retry", "track", track.Title, "err", err)
+		return err
+	}
+
+	p.playStartedAt = time.Now()
 	slog.Debug("playCurrentLocked: reset playCounted", "track_id", track.ID, "title", track.Title)
 
 	p.startPollingLocked(ctx)
@@ -226,8 +244,14 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 func (p *Player) tryPlayWithRetry(ctx context.Context, streamURL, metadata string) error {
 	for attempt := 0; attempt < 2; attempt++ {
 		err := p.transport.SetURI(ctx, streamURL, metadata)
+		if err != nil {
+			slog.Debug("SetURI failed", "err", err, "attempt", attempt+1)
+		}
 		if err == nil {
 			err = p.transport.Play(ctx)
+			if err != nil {
+				slog.Debug("Play failed", "err", err, "attempt", attempt+1)
+			}
 		}
 		if err == nil {
 			return nil
@@ -577,8 +601,66 @@ func (p *Player) pollOnce(ctx context.Context) {
 		return
 	}
 
-	// Check if track ended naturally
+	gracePeriod := 5 * time.Second
+
+	// Handle StateLoading → StatePlaying transition
+	if p.state == StateLoading {
+		if tState == dlna.StatePlaying {
+			slog.Info("renderer started playing", "track", p.queue.Current().Title)
+			p.state = StatePlaying
+			p.playStartTime = time.Now()
+			p.notify()
+			return
+		}
+		// Extend grace period if renderer reports TRANSITIONING
+		if tState == "TRANSITIONING" {
+			slog.Debug("renderer transitioning, extending grace period")
+			p.playStartedAt = time.Now()
+			p.notify()
+			return
+		}
+		// Still loading — check if grace period expired
+		if time.Since(p.playStartedAt) > gracePeriod {
+			track := p.queue.Current()
+			slog.Warn("track failed to start within grace period",
+				"track", track.Title, "path", track.Path, "format", track.Format,
+				"renderer_state", tState)
+			// One more retry before giving up
+			slog.Info("retrying play after grace period timeout")
+			streamURL := p.currentStreamURL
+			artURL := fmt.Sprintf("http://%s:%s/api/tracks/%d/art", p.localIP, p.port, track.ID)
+			metadata := buildDIDLMetadata(track, streamURL, artURL)
+			if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
+				slog.Error("retry also failed, skipping track", "track", track.Title, "err", err)
+				if p.queue.Next() == nil {
+					p.state = StateIdle
+					p.currentStreamURL = ""
+					p.stopPollingLocked()
+					p.notify()
+					return
+				}
+				p.playCurrentLocked(ctx)
+				return
+			}
+			p.playStartedAt = time.Now()
+		}
+		p.notify()
+		return
+	}
+
+	// Check if track ended naturally (only when actually playing, not loading)
 	if tState == dlna.StateStopped && p.state == StatePlaying {
+		// Grace period: ignore STOPPED shortly after play started
+		if time.Since(p.playStartedAt) < gracePeriod {
+			slog.Debug("ignoring STOPPED during grace period", "elapsed", time.Since(p.playStartedAt))
+			return
+		}
+		// Require that we've received a real duration from the renderer
+		if p.durationMs == 0 {
+			slog.Debug("ignoring STOPPED with zero duration")
+			return
+		}
+
 		slog.Info("track ended naturally")
 		p.checkPlayCountLocked(ctx, true) // finished naturally → count
 
