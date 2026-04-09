@@ -147,6 +147,40 @@ func run() error {
 			}
 			slog.Info("initial scan done", "tracks", count)
 		}()
+
+		// Backfill audio format info for existing FLAC tracks that don't have it yet
+		go func() {
+			// Wait for initial scan to complete
+			time.Sleep(5 * time.Second)
+			tracks, err := s.ListTracksNeedingAudioInfo(ctx, musicDir)
+			if err != nil {
+				slog.Warn("list tracks for audio info backfill", "err", err)
+				return
+			}
+			if len(tracks) == 0 {
+				return
+			}
+			slog.Info("backfilling audio info", "tracks", len(tracks))
+			for _, t := range tracks {
+				if ctx.Err() != nil {
+					return
+				}
+				fullPath := filepath.Join(musicDir, filepath.FromSlash(t.Path))
+				info, err := library.ReadFLACStreamInfo(fullPath)
+				if err != nil {
+					continue
+				}
+				bitrateKbps := 0
+				if fi, statErr := os.Stat(fullPath); statErr == nil && info.TotalSamples > 0 && info.SampleRate > 0 {
+					durationSec := float64(info.TotalSamples) / float64(info.SampleRate)
+					bitrateKbps = int(float64(fi.Size()) * 8 / durationSec / 1000)
+				}
+				if err := s.UpdateTrackAudioInfo(ctx, t.ID, info.SampleRate, info.BitDepth, bitrateKbps); err != nil {
+					slog.Warn("update audio info", "id", t.ID, "err", err)
+				}
+			}
+			slog.Info("audio info backfill complete")
+		}()
 	}
 
 	// DLNA discovery + auto-reconnect to last device

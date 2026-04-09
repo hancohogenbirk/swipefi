@@ -199,14 +199,17 @@ func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 		}
 
 		track := &store.Track{
-			Path:       meta.Path,
-			Title:      meta.Title,
-			Artist:     meta.Artist,
-			Album:      meta.Album,
-			DurationMs: meta.DurationMs,
-			Format:     meta.Format,
-			AddedAt:    meta.AddedAt,
-			MusicDir:   musicDir,
+			Path:         meta.Path,
+			Title:        meta.Title,
+			Artist:       meta.Artist,
+			Album:        meta.Album,
+			DurationMs:   meta.DurationMs,
+			Format:       meta.Format,
+			AddedAt:      meta.AddedAt,
+			MusicDir:     musicDir,
+			SampleRateHz: meta.SampleRateHz,
+			BitDepth:     meta.BitDepth,
+			BitrateKbps:  meta.BitrateKbps,
 		}
 
 		batch = append(batch, track)
@@ -320,14 +323,17 @@ func (sc *Scanner) ScanFolder(ctx context.Context, folder string) (int, error) {
 		}
 
 		track := &store.Track{
-			Path:       meta.Path,
-			Title:      meta.Title,
-			Artist:     meta.Artist,
-			Album:      meta.Album,
-			DurationMs: meta.DurationMs,
-			Format:     meta.Format,
-			AddedAt:    meta.AddedAt,
-			MusicDir:   musicDir,
+			Path:         meta.Path,
+			Title:        meta.Title,
+			Artist:       meta.Artist,
+			Album:        meta.Album,
+			DurationMs:   meta.DurationMs,
+			Format:       meta.Format,
+			AddedAt:      meta.AddedAt,
+			MusicDir:     musicDir,
+			SampleRateHz: meta.SampleRateHz,
+			BitDepth:     meta.BitDepth,
+			BitrateKbps:  meta.BitrateKbps,
 		}
 
 		if err := sc.store.UpsertTrack(ctx, track); err != nil {

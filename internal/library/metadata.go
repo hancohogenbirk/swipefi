@@ -16,13 +16,16 @@ type ArtData struct {
 }
 
 type TrackMeta struct {
-	Path       string
-	Title      string
-	Artist     string
-	Album      string
-	DurationMs int64
-	Format     string
-	AddedAt    int64
+	Path         string
+	Title        string
+	Artist       string
+	Album        string
+	DurationMs   int64
+	Format       string
+	AddedAt      int64
+	SampleRateHz int
+	BitDepth     int
+	BitrateKbps  int
 }
 
 var audioExtensions = map[string]string{
@@ -95,6 +98,20 @@ func ReadMetadata(fullPath, relPath string) (*TrackMeta, error) {
 
 	if meta.Artist == "" && len(parts) >= 2 {
 		meta.Artist = parts[len(parts)-2]
+	}
+
+	// Extract audio format info for FLAC files
+	if meta.Format == "flac" {
+		if flacInfo, err := ReadFLACStreamInfo(fullPath); err == nil {
+			meta.SampleRateHz = flacInfo.SampleRate
+			meta.BitDepth = flacInfo.BitDepth
+			// Calculate bitrate from file size and duration
+			if flacInfo.TotalSamples > 0 && flacInfo.SampleRate > 0 {
+				durationSec := float64(flacInfo.TotalSamples) / float64(flacInfo.SampleRate)
+				meta.DurationMs = int64(durationSec * 1000)
+				meta.BitrateKbps = int(float64(info.Size()) * 8 / durationSec / 1000)
+			}
+		}
 	}
 
 	return meta, nil
