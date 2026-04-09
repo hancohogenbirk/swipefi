@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -61,15 +62,26 @@ func New(dbPath string) (*Store, error) {
 			return nil, fmt.Errorf("set schema version: %w", err)
 		}
 	}
+	if err := s.migrateAudioInfo(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate audio info: %w", err)
+	}
 
 	return s, nil
 }
 
 func (s *Store) getSchemaVersion() (int, error) {
-	var v int
-	err := s.db.QueryRow("SELECT value FROM config WHERE key = 'schema_version'").Scan(&v)
+	var val string
+	err := s.db.QueryRow("SELECT value FROM config WHERE key = 'schema_version'").Scan(&val)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
 	if err != nil {
-		return 0, nil // no row = version 0
+		return 0, err
+	}
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, err
 	}
 	return v, nil
 }
@@ -78,10 +90,47 @@ func (s *Store) setSchemaVersion(v int) error {
 	_, err := s.db.Exec(`
 		INSERT INTO config (key, value) VALUES ('schema_version', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
-	`, v)
+	`, strconv.Itoa(v))
 	return err
 }
 
+func (s *Store) migrateAudioInfo() error {
+	version, err := s.getSchemaVersion()
+	if err != nil {
+		return fmt.Errorf("get schema version: %w", err)
+	}
+
+	if version < 2 {
+		for _, col := range []string{
+			"ALTER TABLE tracks ADD COLUMN sample_rate_hz INTEGER NOT NULL DEFAULT 0",
+			"ALTER TABLE tracks ADD COLUMN bit_depth INTEGER NOT NULL DEFAULT 0",
+			"ALTER TABLE tracks ADD COLUMN bitrate_kbps INTEGER NOT NULL DEFAULT 0",
+		} {
+			_, err := s.db.Exec(col)
+			if err != nil {
+				// Column might already exist — verify by selecting it
+				var dummy int
+				colName := ""
+				if strings.Contains(col, "sample_rate_hz") {
+					colName = "sample_rate_hz"
+				} else if strings.Contains(col, "bit_depth") {
+					colName = "bit_depth"
+				} else {
+					colName = "bitrate_kbps"
+				}
+				checkErr := s.db.QueryRow("SELECT " + colName + " FROM tracks LIMIT 1").Scan(&dummy)
+				if checkErr != nil && checkErr != sql.ErrNoRows {
+					return fmt.Errorf("add column %s: %w", colName, err)
+				}
+			}
+		}
+		if err := s.setSchemaVersion(2); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
+
+	return nil
+}
 func (s *Store) Close() error {
 	return s.db.Close()
 }

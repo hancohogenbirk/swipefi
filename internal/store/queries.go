@@ -12,18 +12,21 @@ import (
 )
 
 type Track struct {
-	ID         int64  `json:"id"`
-	Path       string `json:"path"`
-	Title      string `json:"title"`
-	Artist     string `json:"artist"`
-	Album      string `json:"album"`
-	DurationMs int64  `json:"duration_ms"`
-	Format     string `json:"format"`
-	PlayCount  int    `json:"play_count"`
-	AddedAt    int64  `json:"added_at"`
-	LastPlayed *int64 `json:"last_played,omitempty"`
-	Deleted    bool   `json:"-"`
-	MusicDir   string `json:"-"`
+	ID           int64  `json:"id"`
+	Path         string `json:"path"`
+	Title        string `json:"title"`
+	Artist       string `json:"artist"`
+	Album        string `json:"album"`
+	DurationMs   int64  `json:"duration_ms"`
+	Format       string `json:"format"`
+	PlayCount    int    `json:"play_count"`
+	AddedAt      int64  `json:"added_at"`
+	LastPlayed   *int64 `json:"last_played,omitempty"`
+	Deleted      bool   `json:"-"`
+	MusicDir     string `json:"-"`
+	SampleRateHz int    `json:"sample_rate_hz,omitempty"`
+	BitDepth     int    `json:"bit_depth,omitempty"`
+	BitrateKbps  int    `json:"bitrate_kbps,omitempty"`
 }
 
 var ErrTrackNotFound = errors.New("track not found")
@@ -43,8 +46,8 @@ var validOrderDirs = map[string]string{
 func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir, sample_rate_hz, bit_depth, bitrate_kbps)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path, music_dir) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
@@ -52,8 +55,12 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 			duration_ms = excluded.duration_ms,
 			format = excluded.format,
 			deleted = 0,
-			music_dir = excluded.music_dir
-	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir)
+			music_dir = excluded.music_dir,
+			sample_rate_hz = excluded.sample_rate_hz,
+			bit_depth = excluded.bit_depth,
+			bitrate_kbps = excluded.bitrate_kbps
+	`, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir,
+		t.SampleRateHz, t.BitDepth, t.BitrateKbps)
 	if err != nil {
 		return fmt.Errorf("upsert track: %w", err)
 	}
@@ -128,8 +135,8 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 
 	now := time.Now().Unix()
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir, sample_rate_hz, bit_depth, bitrate_kbps)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path, music_dir) DO UPDATE SET
 			title = excluded.title,
 			artist = excluded.artist,
@@ -137,7 +144,10 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 			duration_ms = excluded.duration_ms,
 			format = excluded.format,
 			deleted = 0,
-			music_dir = excluded.music_dir
+			music_dir = excluded.music_dir,
+			sample_rate_hz = excluded.sample_rate_hz,
+			bit_depth = excluded.bit_depth,
+			bitrate_kbps = excluded.bitrate_kbps
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
@@ -145,7 +155,8 @@ func (s *Store) UpsertTrackBatch(ctx context.Context, tracks []*Track) error {
 	defer stmt.Close()
 
 	for _, t := range tracks {
-		if _, err := stmt.ExecContext(ctx, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir); err != nil {
+		if _, err := stmt.ExecContext(ctx, t.Path, t.Title, t.Artist, t.Album, t.DurationMs, t.Format, t.AddedAt, now, t.MusicDir,
+			t.SampleRateHz, t.BitDepth, t.BitrateKbps); err != nil {
 			return fmt.Errorf("exec %s: %w", t.Path, err)
 		}
 	}
@@ -157,10 +168,10 @@ func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
 	var t Track
 	var lastPlayed sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps
 		FROM tracks WHERE id = ?
 	`, id).Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs, &t.Format,
-		&t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted)
+		&t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted, &t.SampleRateHz, &t.BitDepth, &t.BitrateKbps)
 	if err == sql.ErrNoRows {
 		return nil, ErrTrackNotFound
 	}
@@ -175,7 +186,7 @@ func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
 
 // ListTracks returns tracks in a folder recursively (for playback queue building).
 func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
-	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps
 		FROM tracks WHERE deleted = 0 AND music_dir = ?`
 
 	args := []any{s.getMusicDir()}
@@ -207,7 +218,8 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 		var t Track
 		var lastPlayed sql.NullInt64
 		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
-			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted,
+			&t.SampleRateHz, &t.BitDepth, &t.BitrateKbps); err != nil {
 			return nil, fmt.Errorf("scan track: %w", err)
 		}
 		if lastPlayed.Valid {
@@ -220,7 +232,7 @@ func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([
 
 // ListTracksDirectOnly returns only tracks that are direct children of a folder (not in subfolders).
 func (s *Store) ListTracksDirectOnly(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
-	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps
 		FROM tracks WHERE deleted = 0 AND music_dir = ?`
 
 	args := []any{s.getMusicDir()}
@@ -254,7 +266,8 @@ func (s *Store) ListTracksDirectOnly(ctx context.Context, folder, sortBy, order 
 		var t Track
 		var lastPlayed sql.NullInt64
 		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
-			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted,
+			&t.SampleRateHz, &t.BitDepth, &t.BitrateKbps); err != nil {
 			return nil, fmt.Errorf("scan track: %w", err)
 		}
 		if lastPlayed.Valid {
@@ -312,7 +325,7 @@ func (s *Store) TrackExistsByPath(ctx context.Context, path string) bool {
 // ListDeleted returns all tracks marked as deleted.
 func (s *Store) ListDeleted(ctx context.Context) ([]Track, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted
+		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps
 		FROM tracks WHERE deleted = 1 AND music_dir = ? ORDER BY title ASC
 	`, s.getMusicDir())
 	if err != nil {
@@ -325,7 +338,8 @@ func (s *Store) ListDeleted(ctx context.Context) ([]Track, error) {
 		var t Track
 		var lastPlayed sql.NullInt64
 		if err := rows.Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs,
-			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted); err != nil {
+			&t.Format, &t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted,
+			&t.SampleRateHz, &t.BitDepth, &t.BitrateKbps); err != nil {
 			return nil, fmt.Errorf("scan deleted track: %w", err)
 		}
 		if lastPlayed.Valid {
@@ -359,4 +373,37 @@ func (s *Store) DeletedCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM tracks WHERE deleted = 1 AND music_dir = ?", s.getMusicDir()).Scan(&count)
 	return count, err
+}
+
+// UpdateTrackAudioInfo sets the audio format fields for a track.
+func (s *Store) UpdateTrackAudioInfo(ctx context.Context, id int64, sampleRate, bitDepth, bitrateKbps int) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE tracks SET sample_rate_hz = ?, bit_depth = ?, bitrate_kbps = ? WHERE id = ?
+	`, sampleRate, bitDepth, bitrateKbps, id)
+	if err != nil {
+		return fmt.Errorf("update audio info %d: %w", id, err)
+	}
+	return nil
+}
+
+// ListTracksNeedingAudioInfo returns FLAC tracks where audio info hasn't been populated.
+func (s *Store) ListTracksNeedingAudioInfo(ctx context.Context, musicDir string) ([]Track, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, path, format FROM tracks
+		WHERE sample_rate_hz = 0 AND format = 'flac' AND deleted = 0 AND music_dir = ?
+	`, musicDir)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		if err := rows.Scan(&t.ID, &t.Path, &t.Format); err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, rows.Err()
 }
