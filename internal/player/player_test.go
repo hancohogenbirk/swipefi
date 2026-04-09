@@ -21,23 +21,36 @@ type mockTransport struct {
 	stopCalls   int
 	setURICalls int
 	playErr     error
+	// When true, SetURI/Play/Stop check ctx.Err() first and return it if
+	// non-nil. This catches bugs where a cancelled context is passed.
+	checkCtx bool
 }
 
 func newMockTransport() *mockTransport {
 	return &mockTransport{state: dlna.StateStopped}
 }
 
-func (m *mockTransport) SetURI(_ context.Context, uri, _ string) error {
+func (m *mockTransport) SetURI(ctx context.Context, uri, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.checkCtx {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	m.setURICalls++
 	m.uri = uri
 	return nil
 }
 
-func (m *mockTransport) Play(_ context.Context) error {
+func (m *mockTransport) Play(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.checkCtx {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	m.playCalls++
 	if m.playErr != nil {
 		return m.playErr
@@ -46,9 +59,14 @@ func (m *mockTransport) Play(_ context.Context) error {
 	return nil
 }
 
-func (m *mockTransport) Stop(_ context.Context) error {
+func (m *mockTransport) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.checkCtx {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	m.stopCalls++
 	m.state = dlna.StateStopped
 	return nil
@@ -242,5 +260,63 @@ func TestPlayCurrentLocked_StopsCurrentBeforeNewTrack(t *testing.T) {
 
 	if stops < 1 {
 		t.Errorf("expected at least 1 Stop call, got %d", stops)
+	}
+}
+
+func TestPollOnce_NaturalEndStartsNextTrack(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Enable context checking — transport methods will fail if they
+	// receive a cancelled context. This catches the auto-advance
+	// regression where playCurrentLocked was called with the poll
+	// context which gets cancelled by stopPollingLocked.
+	mt.mu.Lock()
+	mt.checkCtx = true
+	mt.mu.Unlock()
+
+	// Simulate: track 1 has been playing for a while, now stopped naturally.
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second) // well past grace period
+	p.durationMs = 180000                                // 3 minutes
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	// Renderer reports STOPPED with position 0, duration 3 min — track ended.
+	mt.setState(dlna.StateStopped)
+	mt.setPosition(0, 3*time.Minute)
+
+	// Record play calls before pollOnce.
+	mt.mu.Lock()
+	callsBefore := mt.playCalls
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	pos := p.queue.Position()
+	state := p.state
+	p.mu.Unlock()
+
+	// Queue should have advanced to track 2 (position 1).
+	if pos != 1 {
+		t.Errorf("expected queue position 1, got %d", pos)
+	}
+
+	// The new track should be loading or playing (not idle).
+	if state == StateIdle {
+		t.Errorf("expected non-idle state after auto-advance, got %s", state)
+	}
+
+	// Transport.Play should have been called for the new track (at least 1
+	// call from tryPlayWithRetry). With checkCtx enabled, this would be 0
+	// if a cancelled context was passed — the core regression being tested.
+	mt.mu.Lock()
+	newCalls := mt.playCalls - callsBefore
+	mt.mu.Unlock()
+
+	if newCalls < 1 {
+		t.Errorf("expected at least 1 new Play call for next track, got %d", newCalls)
 	}
 }

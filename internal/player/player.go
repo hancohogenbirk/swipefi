@@ -197,9 +197,11 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 
 	// Stop current playback first — DLNA renderers can get confused
 	// when receiving a new URI while still playing/buffering another.
+	// Use p.appCtx (not ctx) because ctx may be a poll context that
+	// gets cancelled by stopPollingLocked below.
 	if p.transport != nil && (p.state == StatePlaying || p.state == StatePaused || p.state == StateLoading) {
 		p.stopPollingLocked()
-		p.transport.Stop(ctx)
+		p.transport.Stop(p.appCtx)
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -226,8 +228,9 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.playCounted = false
 	p.notify()
 
-	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt
-	if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
+	// Try play with one retry — DLNA renderers sometimes return EOF on first attempt.
+	// Use p.appCtx so transport calls survive poll-context cancellation.
+	if err := p.tryPlayWithRetry(p.appCtx, streamURL, metadata); err != nil {
 		slog.Error("play failed after retry", "track", track.Title, "err", err)
 		return err
 	}
@@ -235,7 +238,7 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.playStartedAt = time.Now()
 	slog.Debug("playCurrentLocked: reset playCounted", "track_id", track.ID, "title", track.Title)
 
-	p.startPollingLocked(ctx)
+	p.startPollingLocked(p.appCtx)
 	p.notify()
 	return nil
 }
@@ -630,7 +633,8 @@ func (p *Player) pollOnce(ctx context.Context) {
 			streamURL := p.currentStreamURL
 			artURL := fmt.Sprintf("http://%s:%s/api/tracks/%d/art", p.localIP, p.port, track.ID)
 			metadata := buildDIDLMetadata(track, streamURL, artURL)
-			if err := p.tryPlayWithRetry(ctx, streamURL, metadata); err != nil {
+			// Use p.appCtx so transport calls survive poll-context cancellation.
+			if err := p.tryPlayWithRetry(p.appCtx, streamURL, metadata); err != nil {
 				slog.Error("retry also failed, skipping track", "track", track.Title, "err", err)
 				if p.queue.Next() == nil {
 					p.state = StateIdle
@@ -639,7 +643,7 @@ func (p *Player) pollOnce(ctx context.Context) {
 					p.notify()
 					return
 				}
-				p.playCurrentLocked(ctx)
+				p.playCurrentLocked(p.appCtx)
 				return
 			}
 			p.playStartedAt = time.Now()
@@ -662,7 +666,7 @@ func (p *Player) pollOnce(ctx context.Context) {
 		}
 
 		slog.Info("track ended naturally")
-		p.checkPlayCountLocked(ctx, true) // finished naturally → count
+		p.checkPlayCountLocked(p.appCtx, true) // finished naturally → count
 
 		if p.queue.Next() == nil {
 			p.state = StateIdle
@@ -671,7 +675,8 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.notify()
 			return
 		}
-		p.playCurrentLocked(ctx)
+		// Use p.appCtx so transport calls survive poll-context cancellation.
+		p.playCurrentLocked(p.appCtx)
 		return
 	}
 
