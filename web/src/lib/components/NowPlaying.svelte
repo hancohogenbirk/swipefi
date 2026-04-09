@@ -154,7 +154,7 @@
   .controls-area {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.75rem;
     padding-bottom: 0.25rem;
   }
 
