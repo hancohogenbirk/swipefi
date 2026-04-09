@@ -196,8 +196,12 @@ func run() error {
 		if savedUDN != "" {
 			if renderer, ok := discovery.GetRenderer(savedUDN); ok {
 				transport := dlna.NewTransport(renderer.Transport)
-				p.SetTransport(transport)
-				slog.Info("auto-reconnected to device", "name", renderer.Name, "udn", savedUDN)
+				if _, err := transport.GetState(ctx); err != nil {
+					slog.Warn("saved device not responding, skipping auto-connect", "name", renderer.Name, "err", err)
+				} else {
+					p.SetTransport(transport)
+					slog.Info("auto-reconnected to device", "name", renderer.Name, "udn", savedUDN)
+				}
 			} else {
 				slog.Info("saved device not found, manual selection required", "udn", savedUDN)
 			}
