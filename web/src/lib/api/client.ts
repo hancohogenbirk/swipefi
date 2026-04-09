@@ -41,7 +41,7 @@ export interface Device {
 }
 
 export interface PlayerState {
-  state: 'idle' | 'playing' | 'paused';
+  state: 'idle' | 'loading' | 'playing' | 'paused';
   track?: Track;
   position_ms: number;
   duration_ms: number;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { getPlayerState, updateState, getPlayerLoading } from '../stores/player.svelte';
+  import { getPlayerState, updateState } from '../stores/player.svelte';
   import { ListMusic } from 'lucide-svelte';
   import SwipeCard from './SwipeCard.svelte';
   import ProgressBar from './ProgressBar.svelte';
@@ -10,7 +10,7 @@
 
   let ps = $derived(getPlayerState());
   let track = $derived(ps.track);
-  let playerLoading = $derived(getPlayerLoading());
+  let isLoading = $derived(ps.state === 'loading');
   let transitioning = $state(false);
 
   async function handleSwipeLeft() {
@@ -47,19 +47,26 @@
   </header>
 
   <div class="card-area">
-    {#if playerLoading && !track}
+    {#if isLoading && !track}
       <div class="loading-message">
         <div class="loading-spinner"></div>
         <p>Starting playback...</p>
       </div>
     {:else if track && !transitioning}
-      {#key track.id}
-        <SwipeCard
-          {track}
-          onSwipeLeft={handleSwipeLeft}
-          onSwipeRight={handleSwipeRight}
-        />
-      {/key}
+      <div class="card-wrapper" class:loading-overlay={isLoading}>
+        {#key track.id}
+          <SwipeCard
+            {track}
+            onSwipeLeft={handleSwipeLeft}
+            onSwipeRight={handleSwipeRight}
+          />
+        {/key}
+        {#if isLoading}
+          <div class="overlay-spinner">
+            <div class="loading-spinner"></div>
+          </div>
+        {/if}
+      </div>
     {:else if !track}
       <div class="idle-message">
         <p>No track playing</p>
@@ -120,6 +127,28 @@
     min-height: 0;
     padding: 0.25rem 0.5rem;
     overflow: hidden;
+  }
+
+  .card-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-wrapper.loading-overlay {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .overlay-spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
   }
 
   .controls-area {
