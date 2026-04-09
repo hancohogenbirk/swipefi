@@ -51,7 +51,7 @@ type Player struct {
 	port      string
 	localIP   string
 
-	transport *dlna.Transport
+	transport dlna.Transporter
 	queue     *Queue
 	state     State
 
@@ -108,7 +108,7 @@ func (p *Player) SetDirs(musicDir, deleteDir string) {
 	p.deleteDir = deleteDir
 }
 
-func (p *Player) SetTransport(t *dlna.Transport) {
+func (p *Player) SetTransport(t dlna.Transporter) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.transport = t
