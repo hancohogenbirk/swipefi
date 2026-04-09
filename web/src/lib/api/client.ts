@@ -27,6 +27,9 @@ export interface Track {
   play_count: number;
   added_at: number;
   last_played?: number;
+  sample_rate_hz?: number;
+  bit_depth?: number;
+  bitrate_kbps?: number;
 }
 
 export interface Folder {
