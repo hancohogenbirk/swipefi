@@ -30,12 +30,11 @@
   });
 
   // Drag state
-  let dragIndex = $state<number | null>(null);
-  let dragOverIndex = $state<number | null>(null);
+  let dragOriginalIndex = $state<number | null>(null);
+  let targetIndex = $state<number | null>(null);
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
   let isDragging = $state(false);
   let touchStartY = $state(0);
-  let touchCurrentY = $state(0);
   let itemHeight = 56;
   let dragScrollStart = 0;
   let dragDeltaY = $state(0);
@@ -97,25 +96,27 @@
   let listEl = $state<HTMLElement | null>(null);
   let autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 
+  function measureItemHeight() {
+    if (listEl && listEl.children.length >= 2) {
+      const first = (listEl.children[0] as HTMLElement).getBoundingClientRect();
+      const second = (listEl.children[1] as HTMLElement).getBoundingClientRect();
+      itemHeight = second.top - first.top;
+    } else if (listEl && listEl.children.length === 1) {
+      itemHeight = (listEl.children[0] as HTMLElement).getBoundingClientRect().height + 1;
+    }
+  }
+
   function handleTouchStart(e: TouchEvent, idx: number) {
     const touch = e.touches[0];
     touchStartY = touch.clientY;
-    touchCurrentY = touch.clientY;
 
-    // Measure item height from DOM distance between first two children
-    if (listEl && listEl.children.length >= 2) {
-      const first = listEl.children[0] as HTMLElement;
-      const second = listEl.children[1] as HTMLElement;
-      itemHeight = second.offsetTop - first.offsetTop;
-    } else {
-      const el = (e.currentTarget as HTMLElement);
-      if (el) itemHeight = el.offsetHeight + 1;
-    }
+    measureItemHeight();
 
     // Start hold timer for long-press
     holdTimer = setTimeout(() => {
       isDragging = true;
-      dragIndex = idx;
+      dragOriginalIndex = idx;
+      targetIndex = idx;
       dragOriginY = touchStartY;
       dragScrollStart = listEl?.scrollTop ?? 0;
       if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
@@ -132,9 +133,8 @@
       return;
     }
 
-    if (!isDragging || dragIndex === null) return;
+    if (!isDragging || dragOriginalIndex === null) return;
     e.preventDefault();
-    touchCurrentY = touch.clientY;
     dragDeltaY = touch.clientY - dragOriginY;
 
     // Auto-scroll when dragging near top/bottom edge of visible list
@@ -142,32 +142,27 @@
 
     // Calculate which index we're hovering over, accounting for container scroll
     const scrollDelta = (listEl?.scrollTop ?? 0) - dragScrollStart;
-    const delta = (touchCurrentY - touchStartY) + scrollDelta;
+    const delta = dragDeltaY + scrollDelta;
     const indexOffset = Math.round(delta / itemHeight);
-    const targetIdx = Math.max(0, Math.min(tracks.length - 1, dragIndex + indexOffset));
-
-    if (targetIdx !== dragIndex) {
-      const newIdx = moveTrack(dragIndex, targetIdx)!;
-      dragIndex = newIdx;
-      touchStartY = touchCurrentY;
-      dragOriginY = touchCurrentY;
-      dragScrollStart = listEl?.scrollTop ?? 0;
-      dragOverIndex = newIdx;
-    }
+    targetIndex = Math.max(0, Math.min(tracks.length - 1, dragOriginalIndex + indexOffset));
   }
 
   function handleEdgeScroll(clientY: number) {
     if (!listEl) return;
     const rect = listEl.getBoundingClientRect();
-    const edgeZone = 60; // px from edge to trigger scroll
+    const edgeZone = 60;
 
     stopAutoScroll();
-    if (clientY < rect.top + edgeZone) {
-      // Near top — scroll up
-      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, -8), 16);
-    } else if (clientY > rect.bottom - edgeZone) {
-      // Near bottom — scroll down
-      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, 8), 16);
+
+    const distFromTop = clientY - rect.top;
+    const distFromBottom = rect.bottom - clientY;
+
+    if (distFromTop < edgeZone) {
+      const speed = Math.round(2 + (1 - distFromTop / edgeZone) * 10);
+      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, -speed), 16);
+    } else if (distFromBottom < edgeZone) {
+      const speed = Math.round(2 + (1 - distFromBottom / edgeZone) * 10);
+      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, speed), 16);
     }
   }
 
@@ -181,13 +176,16 @@
   function handleTouchEnd() {
     cancelHold();
     stopAutoScroll();
-    if (isDragging) {
+    if (isDragging && dragOriginalIndex !== null && targetIndex !== null) {
+      if (dragOriginalIndex !== targetIndex) {
+        moveTrack(dragOriginalIndex, targetIndex);
+        saveOrder();
+      }
       isDragging = false;
-      dragIndex = null;
-      dragOverIndex = null;
+      dragOriginalIndex = null;
+      targetIndex = null;
       dragDeltaY = 0;
       dragOriginY = 0;
-      saveOrder();
     }
   }
 
@@ -196,6 +194,30 @@
       clearTimeout(holdTimer);
       holdTimer = null;
     }
+  }
+
+  /** Compute inline style for an item during drag */
+  function getItemStyle(idx: number): string {
+    if (!isDragging || dragOriginalIndex === null || targetIndex === null) return '';
+
+    if (idx === dragOriginalIndex) {
+      // Dragged item follows the finger — no CSS transition
+      return `transform: translateY(${dragDeltaY}px); z-index: 10;`;
+    }
+
+    // Shift other items to create a visual gap at the drop target
+    if (dragOriginalIndex < targetIndex) {
+      // Dragging down: items between original+1 and target shift up
+      if (idx > dragOriginalIndex && idx <= targetIndex) {
+        return `transform: translateY(${-itemHeight}px);`;
+      }
+    } else if (dragOriginalIndex > targetIndex) {
+      // Dragging up: items between target and original-1 shift down
+      if (idx >= targetIndex && idx < dragOriginalIndex) {
+        return `transform: translateY(${itemHeight}px);`;
+      }
+    }
+    return '';
   }
 
   // --- Move up/down buttons (reliable fallback) ---
@@ -239,23 +261,29 @@
   {:else if tracks.length === 0}
     <div class="empty">Queue is empty</div>
   {:else}
-    <div class="queue-list" data-testid="queue-list" bind:this={listEl} onscroll={() => { if (!isDragging) userScrolledAt = Date.now(); }}>
+    <div
+      class="queue-list"
+      class:dragging-active={isDragging}
+      data-testid="queue-list"
+      bind:this={listEl}
+      onscroll={() => { if (!isDragging) userScrolledAt = Date.now(); }}
+    >
       {#each tracks as track, idx (track.id)}
         <div
           class="queue-item"
           class:current={track.id === currentTrackId}
-          class:dragging={isDragging && dragIndex === idx}
-          class:drag-over={isDragging && dragIndex !== idx && dragOverIndex === idx}
+          class:dragging={isDragging && dragOriginalIndex === idx}
           data-testid="queue-item"
           data-track-id={track.id}
           role="button"
           tabindex="0"
-          style={isDragging && dragIndex === idx ? `transform: translateY(${dragDeltaY}px); z-index: 10;` : ''}
+          style={getItemStyle(idx)}
           onclick={() => skipTo(track.id)}
           onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
           ontouchstart={(e) => handleTouchStart(e, idx)}
           ontouchmove={handleTouchMove}
           ontouchend={handleTouchEnd}
+          ontouchcancel={handleTouchEnd}
         >
           <div class="track-indicator">
             {#if track.id === currentTrackId}
@@ -370,9 +398,19 @@
     border-radius: 10px;
     padding: 0.75rem;
     cursor: pointer;
-    transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+    transition: transform 0.15s ease, background 0.15s, box-shadow 0.15s;
     user-select: none;
     touch-action: pan-y;
+  }
+
+  /* During active drag: non-dragged items animate transforms smoothly */
+  .queue-list.dragging-active .queue-item:not(.dragging) {
+    transition: transform 0.15s ease, background 0.15s, box-shadow 0.15s;
+  }
+
+  /* Dragged item: no transform transition, follows finger directly */
+  .queue-list.dragging-active .queue-item.dragging {
+    transition: background 0.15s, box-shadow 0.15s;
   }
 
   .queue-item:hover {
