@@ -13,6 +13,7 @@
 
   let positionMs = $derived(
     idle ? 0 :
+    ps.state === 'loading' ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
     ps.position_ms

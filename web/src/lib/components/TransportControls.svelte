@@ -8,7 +8,7 @@
 
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing');
-  let idle = $derived(ps.state === 'idle');
+  let idle = $derived(ps.state === 'idle' && !ps.track);
 
   async function togglePlay() {
     try {

@@ -11,28 +11,38 @@
   let ps = $derived(getPlayerState());
   let track = $derived(ps.track);
   let isLoading = $derived(ps.state === 'loading');
-  let transitioning = $state(false);
+  let loadingNext = $state(false);
+  let lastTrackId = $state<number | undefined>(undefined);
+
+  // Clear loadingNext when a new track arrives
+  $effect(() => {
+    const currentId = track?.id;
+    if (loadingNext && currentId !== undefined && currentId !== lastTrackId) {
+      loadingNext = false;
+    }
+    lastTrackId = currentId;
+  });
 
   async function handleSwipeLeft() {
-    transitioning = true;
+    loadingNext = true;
     try {
       const s = await api.reject();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] reject failed:', e);
+      loadingNext = false;
     }
-    transitioning = false;
   }
 
   async function handleSwipeRight() {
-    transitioning = true;
+    loadingNext = true;
     try {
       const s = await api.next();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] next failed:', e);
+      loadingNext = false;
     }
-    transitioning = false;
   }
 </script>
 
@@ -47,12 +57,12 @@
   </header>
 
   <div class="card-area">
-    {#if isLoading && !track}
+    {#if loadingNext || (isLoading && !track)}
       <div class="loading-message">
         <div class="loading-spinner"></div>
-        <p>Starting playback...</p>
+        <p>{loadingNext ? 'Loading next track...' : 'Starting playback...'}</p>
       </div>
-    {:else if track && !transitioning}
+    {:else if track}
       <div class="card-wrapper" class:loading-overlay={isLoading}>
         {#key track.id}
           <SwipeCard
@@ -67,7 +77,7 @@
           </div>
         {/if}
       </div>
-    {:else if !track}
+    {:else}
       <div class="idle-message">
         <p>No track playing</p>
         <p class="idle-hint">Browse your folders to start</p>
