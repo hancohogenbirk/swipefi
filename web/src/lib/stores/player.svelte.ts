@@ -4,6 +4,7 @@ const WS_RECONNECT_DELAY_MS = 2000;
 
 let state = $state<PlayerState>({
   state: 'idle',
+  connected: false,
   position_ms: 0,
   duration_ms: 0,
   queue_length: 0,

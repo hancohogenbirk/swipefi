@@ -142,12 +142,15 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 		deleteDir = library.DeleteDir(musicDir)
 	}
 
-	// Look up the connected device name from the saved UDN
+	// Look up the connected device name from the saved UDN,
+	// but only report it if the player actually has an active transport.
 	var connectedDevice string
-	savedUDN, _ := a.store.GetConfig(store.ConfigKeyDeviceUDN)
-	if savedUDN != "" {
-		if renderer, ok := a.discovery.GetRenderer(savedUDN); ok {
-			connectedDevice = renderer.Name
+	if a.player.HasTransport() {
+		savedUDN, _ := a.store.GetConfig(store.ConfigKeyDeviceUDN)
+		if savedUDN != "" {
+			if renderer, ok := a.discovery.GetRenderer(savedUDN); ok {
+				connectedDevice = renderer.Name
+			}
 		}
 	}
 

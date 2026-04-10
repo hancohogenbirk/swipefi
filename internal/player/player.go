@@ -33,6 +33,7 @@ const (
 // PlayerState is the full state broadcast to WebSocket clients.
 type PlayerState struct {
 	State         State        `json:"state"`
+	Connected     bool         `json:"connected"`
 	Track         *store.Track `json:"track,omitempty"`
 	PositionMs    int64        `json:"position_ms"`
 	DurationMs    int64        `json:"duration_ms"`
@@ -71,6 +72,9 @@ type Player struct {
 	// Current position from renderer
 	positionMs int64
 	durationMs int64
+
+	// Consecutive poll errors — disconnect after 3
+	pollErrors int
 
 	// Polling
 	pollCancel context.CancelFunc
@@ -119,6 +123,13 @@ func (p *Player) SetTransport(t dlna.Transporter) {
 	p.transport = t
 }
 
+// HasTransport returns true if a DLNA transport is currently set.
+func (p *Player) HasTransport() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.transport != nil
+}
+
 // Disconnect stops playback and clears the transport.
 func (p *Player) Disconnect(ctx context.Context) {
 	p.mu.Lock()
@@ -144,6 +155,7 @@ func (p *Player) GetState() PlayerState {
 func (p *Player) stateLocked() PlayerState {
 	ps := PlayerState{
 		State:      p.state,
+		Connected:  p.transport != nil,
 		PositionMs: p.positionMs,
 		DurationMs: p.durationMs,
 	}
@@ -578,6 +590,19 @@ func (p *Player) pollOnce(ctx context.Context) {
 	pos, err := transport.GetPosition(ctx)
 	if err != nil {
 		slog.Debug("poll position error", "err", err)
+		p.mu.Lock()
+		p.pollErrors++
+		if p.pollErrors >= 3 {
+			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
+			p.stopPollingLocked()
+			p.state = StateIdle
+			p.transport = nil
+			p.queue = nil
+			p.currentStreamURL = ""
+			p.pollErrors = 0
+			p.notify()
+		}
+		p.mu.Unlock()
 		return
 	}
 
@@ -585,12 +610,26 @@ func (p *Player) pollOnce(ctx context.Context) {
 	tState, err := transport.GetState(ctx)
 	if err != nil {
 		slog.Debug("poll state error", "err", err)
+		p.mu.Lock()
+		p.pollErrors++
+		if p.pollErrors >= 3 {
+			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
+			p.stopPollingLocked()
+			p.state = StateIdle
+			p.transport = nil
+			p.queue = nil
+			p.currentStreamURL = ""
+			p.pollErrors = 0
+			p.notify()
+		}
+		p.mu.Unlock()
 		return
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.pollErrors = 0
 	p.positionMs = pos.RelTime.Milliseconds()
 	p.durationMs = pos.TrackDuration.Milliseconds()
 

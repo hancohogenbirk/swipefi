@@ -45,6 +45,7 @@ export interface Device {
 
 export interface PlayerState {
   state: 'idle' | 'loading' | 'playing' | 'paused';
+  connected: boolean;
   track?: Track;
   position_ms: number;
   duration_ms: number;

@@ -27,9 +27,23 @@
     sessionStorage.setItem(SESSION_KEY_TAB, activeTab);
   });
 
+  // Track previous connected state to detect device loss
+  let wasConnected = $state(false);
+
+  // Watch for device disconnection (connected goes from true to false)
+  $effect(() => {
+    const connected = playerState.connected;
+    if (wasConnected && !connected && appPhase === 'main') {
+      appPhase = 'setup';
+    }
+    wasConnected = connected;
+  });
+
   let devices = $state<Device[]>([]);
   let selectedDevice = $state('');
   let error = $state('');
+  let scanningDevices = $state(false);
+  let connectingDevice = $state('');
 
   let playerState = $derived(getPlayerState());
   let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '' });
@@ -109,12 +123,12 @@
         }
       }
 
-      // Music dir is configured and device found — go to main app
-      // Restore the last active tab from sessionStorage
-      if (devices.length > 0) {
-        selectedDevice = devices[0].udn;
+      // Check if the player is actually connected to a device
+      if (config.connected_device) {
         appPhase = 'main';
         // activeTab is already set from sessionStorage or defaults to 'folders'
+      } else if (devices.length > 0) {
+        appPhase = 'setup';
       } else {
         appPhase = 'setup';
       }
@@ -178,6 +192,8 @@
   }
 
   async function selectDevice(udn: string) {
+    connectingDevice = udn;
+    error = '';
     try {
       await api.selectDevice(udn);
       selectedDevice = udn;
@@ -187,14 +203,17 @@
         startScanPolling();
       }
       appPhase = 'main';
-      error = '';
+      activeTab = 'folders';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to select device';
+    } finally {
+      connectingDevice = '';
     }
   }
 
   async function rescan() {
     error = '';
+    scanningDevices = true;
     try {
       devices = await api.scanDevices();
       if (devices.length === 0) {
@@ -202,6 +221,8 @@
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Scan failed';
+    } finally {
+      scanningDevices = false;
     }
   }
 </script>
@@ -250,14 +271,26 @@
 
       <div class="device-list">
         {#each devices as device}
-          <button class="device-btn" onclick={() => selectDevice(device.udn)}>
-            {device.name}
+          <button
+            class="device-btn"
+            onclick={() => selectDevice(device.udn)}
+            disabled={connectingDevice !== ''}
+          >
+            {#if connectingDevice === device.udn}
+              <span class="spinner"></span> Connecting...
+            {:else}
+              {device.name}
+            {/if}
           </button>
         {/each}
       </div>
 
-      <button class="scan-btn" onclick={rescan}>
-        Scan for devices
+      <button class="scan-btn" onclick={rescan} disabled={scanningDevices}>
+        {#if scanningDevices}
+          <span class="spinner"></span> Scanning...
+        {:else}
+          Scan for devices
+        {/if}
       </button>
     </div>
 
@@ -449,9 +482,30 @@
     margin-top: 1rem;
   }
 
-  .scan-btn:hover {
+  .scan-btn:hover:not(:disabled) {
     border-color: #666;
     color: #aaa;
+  }
+
+  .scan-btn:disabled,
+  .device-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .tab-content {
