@@ -336,16 +336,17 @@
             </span>
           </div>
 
-          <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-          <div
+          <button
+            type="button"
             class="drag-handle"
             data-testid="drag-handle"
+            aria-label="Reorder"
             onclick={(e) => e.stopPropagation()}
             ontouchstart={(e) => handleGripTouchStart(e, idx)}
             onmousedown={(e) => handleGripMouseDown(e, idx)}
           >
             <GripVertical size={20} />
-          </div>
+          </button>
 
           <div class="move-buttons">
             <button
@@ -530,6 +531,8 @@
     align-items: center;
     flex-shrink: 0;
     border-radius: 4px;
+    background: none;
+    border: none;
   }
 
   .drag-handle:active {

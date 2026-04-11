@@ -13,6 +13,7 @@
   const SCAN_POLL_INTERVAL_MS = 500;
   const SESSION_KEY_TAB = 'swipefi-tab';
   const SESSION_KEY_PHASE = 'swipefi-phase';
+  const SESSION_KEY_QUEUE = 'swipefi-queue';
 
   type AppPhase = 'loading' | 'choose-dir' | 'setup' | 'main';
   type Tab = 'folders' | 'player' | 'settings';
@@ -21,26 +22,41 @@
   let appPhase = $state<AppPhase>(savedPhase === 'main' ? 'main' : 'loading');
   let savedTab = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(SESSION_KEY_TAB) : null) as Tab | null;
   let activeTab = $state<Tab>(savedTab || 'folders');
-  let showQueue = $state(false);
+  let showQueue = $state(sessionStorage?.getItem(SESSION_KEY_QUEUE) === 'true');
   let showDeletedManager = $state(false);
 
-  // Persist active tab and app phase across refreshes
+  // Persist active tab, app phase, and queue visibility across refreshes
   $effect(() => {
     sessionStorage.setItem(SESSION_KEY_TAB, activeTab);
   });
   $effect(() => {
     sessionStorage.setItem(SESSION_KEY_PHASE, appPhase);
   });
+  $effect(() => {
+    sessionStorage.setItem(SESSION_KEY_QUEUE, showQueue ? 'true' : 'false');
+  });
 
   // Track previous connected state to detect device loss
   let wasConnected = $state(false);
   let initComplete = $state(false);
+  let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Watch for device disconnection (connected goes from true to false)
+  // Debounced: wait 2s to confirm disconnection is real, not a transient page-load race
   $effect(() => {
     const connected = playerState.connected;
     if (initComplete && wasConnected && !connected && appPhase === 'main') {
-      appPhase = 'setup';
+      if (!disconnectTimer) {
+        disconnectTimer = setTimeout(() => {
+          if (!playerState.connected && appPhase === 'main') {
+            appPhase = 'setup';
+          }
+          disconnectTimer = undefined;
+        }, 2000);
+      }
+    } else if (connected && disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      disconnectTimer = undefined;
     }
     wasConnected = connected;
   });
@@ -157,6 +173,7 @@
   onDestroy(() => {
     disconnectWebSocket();
     stopScanPolling();
+    if (disconnectTimer) clearTimeout(disconnectTimer);
     window.removeEventListener('popstate', handlePopState);
   });
 
