@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { api } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { ListMusic } from 'lucide-svelte';
@@ -12,36 +13,52 @@
   let track = $derived(ps.track);
   let isLoading = $derived(ps.state === 'loading');
   let loadingNext = $state(false);
-  let lastTrackId = $state<number | undefined>(undefined);
+  let loadingTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  // Clear loadingNext when a new track arrives
-  $effect(() => {
-    const currentId = track?.id;
-    if (loadingNext && currentId !== undefined && currentId !== lastTrackId) {
-      loadingNext = false;
+  function startLoading() {
+    loadingNext = true;
+    if (loadingTimeout) clearTimeout(loadingTimeout);
+    loadingTimeout = setTimeout(() => {
+      if (loadingNext) {
+        console.warn('[swipefi] loadingNext safety timeout fired');
+        loadingNext = false;
+      }
+    }, 8000);
+  }
+
+  function clearLoading() {
+    loadingNext = false;
+    if (loadingTimeout) {
+      clearTimeout(loadingTimeout);
+      loadingTimeout = undefined;
     }
-    lastTrackId = currentId;
+  }
+
+  onDestroy(() => {
+    if (loadingTimeout) clearTimeout(loadingTimeout);
   });
 
   async function handleSwipeLeft() {
-    loadingNext = true;
+    startLoading();
     try {
       const s = await api.reject();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] reject failed:', e);
-      loadingNext = false;
+    } finally {
+      clearLoading();
     }
   }
 
   async function handleSwipeRight() {
-    loadingNext = true;
+    startLoading();
     try {
       const s = await api.next();
       updateState(s);
     } catch (e) {
       console.error('[swipefi] next failed:', e);
-      loadingNext = false;
+    } finally {
+      clearLoading();
     }
   }
 </script>

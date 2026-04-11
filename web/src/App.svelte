@@ -330,8 +330,8 @@
         </span>
       </div>
     {/if}
-    <div class="tab-content" class:scanning={scanProgress.scanning}>
-      <div class="tab-panel" class:hidden={activeTab !== 'folders'}>
+    <div class="tab-content">
+      <div class="tab-panel" class:hidden={activeTab !== 'folders'} class:scanning={scanProgress.scanning}>
         <FolderNav
           onNavigateToPlayer={() => activeTab = 'player'}
           onFolderNavigate={pushFolderHistory}
@@ -530,7 +530,7 @@
     position: relative;
   }
 
-  .tab-content.scanning {
+  .tab-panel.scanning {
     opacity: 0.4;
     pointer-events: none;
   }
