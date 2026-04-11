@@ -142,6 +142,65 @@ test.describe.serial('Queue management', () => {
     expect(secondId).toBe(firstId);
   });
 
+  test('all queue items have a drag handle', async ({ page }) => {
+    await ensurePlaying(page);
+    await page.locator('.queue-btn').click();
+    await expect(page.locator('.queue-view')).toBeVisible();
+
+    const items = page.locator('[data-testid="queue-item"]');
+    const count = await items.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      await expect(items.nth(i).locator('[data-testid="drag-handle"]')).toBeVisible();
+    }
+  });
+
+  test('drag handle reorders track via mouse', async ({ page }) => {
+    await ensurePlaying(page);
+    await page.locator('.queue-btn').click();
+    await expect(page.locator('.queue-view')).toBeVisible();
+
+    const items = page.locator('[data-testid="queue-item"]');
+    const count = await items.count();
+    if (count < 3) {
+      test.skip();
+      return;
+    }
+
+    // Get the ID of the third track
+    const thirdId = await items.nth(2).getAttribute('data-track-id');
+
+    // Get the bounding boxes of the third and first items
+    const thirdHandle = items.nth(2).locator('[data-testid="drag-handle"]');
+    const firstItem = items.nth(0);
+    const handleBox = await thirdHandle.boundingBox();
+    const firstBox = await firstItem.boundingBox();
+
+    if (!handleBox || !firstBox) {
+      test.skip();
+      return;
+    }
+
+    // Drag from third item's handle to first item's position
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    const endY = firstBox.y + firstBox.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    // Move in steps to exceed threshold and trigger reorder
+    await page.mouse.move(startX, startY - 10, { steps: 2 });
+    await page.mouse.move(startX, endY, { steps: 10 });
+    await page.mouse.up();
+
+    await page.waitForTimeout(500);
+
+    // The third track should now be at position 1 (index 0)
+    const firstId = await items.nth(0).getAttribute('data-track-id');
+    expect(firstId).toBe(thirdId);
+  });
+
   test('back button returns to now playing from queue', async ({ page }) => {
     await ensurePlaying(page);
     await page.locator('.queue-btn').click();
