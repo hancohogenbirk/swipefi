@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, onDestroy } from 'svelte';
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
-  import { ArrowLeft, ChevronUp, ChevronDown, Play } from 'lucide-svelte';
+  import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical } from 'lucide-svelte';
 
-  const HOLD_DELAY_MS = 250;
   const HAPTIC_DURATION_MS = 30;
-  const DRAG_JITTER_PX = 20;
-  const SCROLL_SUPPRESS_MS = 3000;
+  const MOUSE_DRAG_THRESHOLD_PX = 3;
 
   let { onBack }: { onBack: () => void } = $props();
 
@@ -19,7 +17,6 @@
   let currentTrackId = $derived(ps.track?.id);
 
   let lastTrackId = $state<number | undefined>(undefined);
-  let userScrolledAt = $state(0);
 
   $effect(() => {
     const currentId = ps.track?.id;
@@ -32,15 +29,18 @@
   // Drag state
   let dragOriginalIndex = $state<number | null>(null);
   let targetIndex = $state<number | null>(null);
-  let holdTimer: ReturnType<typeof setTimeout> | null = null;
   let isDragging = $state(false);
-  let touchStartY = $state(0);
-  let itemHeight = 56;
-  let dragScrollStart = 0;
   let dragDeltaY = $state(0);
   let dragOriginY = $state(0);
+  let dragScrollStart = 0;
+  let itemHeight = 56;
 
-  async function loadQueue(forceScroll = false) {
+  // Mouse drag: track pending state before threshold is met
+  let mouseDownY = 0;
+  let mouseDragPending = false;
+  let pendingMouseIndex: number | null = null;
+
+  async function loadQueue() {
     loading = true;
     try {
       const q = await api.queue();
@@ -51,13 +51,12 @@
     } finally {
       loading = false;
     }
-    scrollToCurrent(forceScroll);
+    scrollToCurrent();
   }
 
-  async function scrollToCurrent(force = false) {
+  async function scrollToCurrent() {
     await tick();
     if (!listEl) return;
-    if (!force && Date.now() - userScrolledAt < SCROLL_SUPPRESS_MS) return;
     const currentEl = listEl.querySelector('.queue-item.current') as HTMLElement;
     if (currentEl) {
       currentEl.scrollIntoView({ block: 'center', behavior: 'instant' });
@@ -69,7 +68,7 @@
     try {
       const s = await api.skipTo(trackId);
       updateState(s);
-      await loadQueue(true);
+      await loadQueue();
     } catch (e) {
       console.error('[swipefi] skip to failed:', e);
     }
@@ -92,7 +91,6 @@
     return toIdx;
   }
 
-  // --- Touch-based long-press drag ---
   let listEl = $state<HTMLElement | null>(null);
   let autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -104,47 +102,6 @@
     } else if (listEl && listEl.children.length === 1) {
       itemHeight = (listEl.children[0] as HTMLElement).getBoundingClientRect().height + 1;
     }
-  }
-
-  function handleTouchStart(e: TouchEvent, idx: number) {
-    const touch = e.touches[0];
-    touchStartY = touch.clientY;
-
-    measureItemHeight();
-
-    // Start hold timer for long-press
-    holdTimer = setTimeout(() => {
-      isDragging = true;
-      dragOriginalIndex = idx;
-      targetIndex = idx;
-      dragOriginY = touchStartY;
-      dragScrollStart = listEl?.scrollTop ?? 0;
-      if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
-    }, HOLD_DELAY_MS);
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    const touch = e.touches[0];
-    const dy = Math.abs(touch.clientY - touchStartY);
-
-    // Cancel long-press if finger moved too much before hold triggered
-    if (!isDragging && dy > DRAG_JITTER_PX) {
-      cancelHold();
-      return;
-    }
-
-    if (!isDragging || dragOriginalIndex === null) return;
-    e.preventDefault();
-    dragDeltaY = touch.clientY - dragOriginY;
-
-    // Auto-scroll when dragging near top/bottom edge of visible list
-    handleEdgeScroll(touch.clientY);
-
-    // Calculate which index we're hovering over, accounting for container scroll
-    const scrollDelta = (listEl?.scrollTop ?? 0) - dragScrollStart;
-    const delta = dragDeltaY + scrollDelta;
-    const indexOffset = Math.round(delta / itemHeight);
-    targetIndex = Math.max(0, Math.min(tracks.length - 1, dragOriginalIndex + indexOffset));
   }
 
   function handleEdgeScroll(clientY: number) {
@@ -173,28 +130,109 @@
     }
   }
 
-  function handleTouchEnd() {
-    cancelHold();
+  // --- Shared drag helpers (used by both touch and mouse) ---
+
+  function startDrag(idx: number, clientY: number) {
+    isDragging = true;
+    dragOriginalIndex = idx;
+    targetIndex = idx;
+    dragOriginY = clientY;
+    dragScrollStart = listEl?.scrollTop ?? 0;
+    dragDeltaY = 0;
+    measureItemHeight();
+    if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
+  }
+
+  function updateDrag(clientY: number) {
+    dragDeltaY = clientY - dragOriginY;
+    handleEdgeScroll(clientY);
+    const scrollDelta = (listEl?.scrollTop ?? 0) - dragScrollStart;
+    const delta = dragDeltaY + scrollDelta;
+    const indexOffset = Math.round(delta / itemHeight);
+    targetIndex = Math.max(0, Math.min(tracks.length - 1, (dragOriginalIndex ?? 0) + indexOffset));
+  }
+
+  function finishDrag() {
     stopAutoScroll();
     if (isDragging && dragOriginalIndex !== null && targetIndex !== null) {
       if (dragOriginalIndex !== targetIndex) {
         moveTrack(dragOriginalIndex, targetIndex);
         saveOrder();
       }
-      isDragging = false;
-      dragOriginalIndex = null;
-      targetIndex = null;
-      dragDeltaY = 0;
-      dragOriginY = 0;
     }
+    isDragging = false;
+    dragOriginalIndex = null;
+    targetIndex = null;
+    dragDeltaY = 0;
+    dragOriginY = 0;
   }
 
-  function cancelHold() {
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
+  // --- Touch drag handlers (mobile) ---
+
+  function handleGripTouchStart(e: TouchEvent, idx: number) {
+    const touch = e.touches[0];
+    startDrag(idx, touch.clientY);
+    document.addEventListener('touchmove', handleDocTouchMove, { passive: false });
+    document.addEventListener('touchend', handleDocTouchEnd);
+    document.addEventListener('touchcancel', handleDocTouchEnd);
   }
+
+  function handleDocTouchMove(e: TouchEvent) {
+    if (!isDragging) return;
+    e.preventDefault();
+    updateDrag(e.touches[0].clientY);
+  }
+
+  function handleDocTouchEnd() {
+    document.removeEventListener('touchmove', handleDocTouchMove);
+    document.removeEventListener('touchend', handleDocTouchEnd);
+    document.removeEventListener('touchcancel', handleDocTouchEnd);
+    finishDrag();
+  }
+
+  // --- Mouse drag handlers (desktop) ---
+
+  function handleGripMouseDown(e: MouseEvent, idx: number) {
+    e.preventDefault();
+    mouseDownY = e.clientY;
+    mouseDragPending = true;
+    pendingMouseIndex = idx;
+    document.addEventListener('mousemove', handleDocMouseMove);
+    document.addEventListener('mouseup', handleDocMouseUp);
+  }
+
+  function handleDocMouseMove(e: MouseEvent) {
+    if (mouseDragPending && !isDragging) {
+      if (Math.abs(e.clientY - mouseDownY) >= MOUSE_DRAG_THRESHOLD_PX) {
+        mouseDragPending = false;
+        startDrag(pendingMouseIndex!, mouseDownY);
+      } else {
+        return;
+      }
+    }
+    if (!isDragging) return;
+    e.preventDefault();
+    updateDrag(e.clientY);
+  }
+
+  function handleDocMouseUp() {
+    document.removeEventListener('mousemove', handleDocMouseMove);
+    document.removeEventListener('mouseup', handleDocMouseUp);
+    mouseDragPending = false;
+    pendingMouseIndex = null;
+    finishDrag();
+  }
+
+  // --- Cleanup ---
+
+  onDestroy(() => {
+    document.removeEventListener('touchmove', handleDocTouchMove);
+    document.removeEventListener('touchend', handleDocTouchEnd);
+    document.removeEventListener('touchcancel', handleDocTouchEnd);
+    document.removeEventListener('mousemove', handleDocMouseMove);
+    document.removeEventListener('mouseup', handleDocMouseUp);
+    stopAutoScroll();
+  });
 
   /** Compute inline style for an item during drag */
   function getItemStyle(idx: number): string {
@@ -238,7 +276,7 @@
     }
   }
 
-  loadQueue(true);
+  loadQueue();
 </script>
 
 <div class="queue-view">
@@ -253,7 +291,7 @@
   {#if isDragging}
     <div class="drag-hint">Release to drop</div>
   {:else}
-    <div class="drag-hint subtle">Tap to play · Long press to reorder</div>
+    <div class="drag-hint subtle">Drag ≡ to reorder · Tap to play</div>
   {/if}
 
   {#if loading}
@@ -266,7 +304,6 @@
       class:dragging-active={isDragging}
       data-testid="queue-list"
       bind:this={listEl}
-      onscroll={() => { if (!isDragging) userScrolledAt = Date.now(); }}
     >
       {#each tracks as track, idx (track.id)}
         <div
@@ -280,10 +317,6 @@
           style={getItemStyle(idx)}
           onclick={() => skipTo(track.id)}
           onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
-          ontouchstart={(e) => handleTouchStart(e, idx)}
-          ontouchmove={handleTouchMove}
-          ontouchend={handleTouchEnd}
-          ontouchcancel={handleTouchEnd}
         >
           <div class="track-indicator">
             {#if track.id === currentTrackId}
@@ -301,6 +334,17 @@
                 · {track.play_count}×
               {/if}
             </span>
+          </div>
+
+          <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+          <div
+            class="drag-handle"
+            data-testid="drag-handle"
+            onclick={(e) => e.stopPropagation()}
+            ontouchstart={(e) => handleGripTouchStart(e, idx)}
+            onmousedown={(e) => handleGripMouseDown(e, idx)}
+          >
+            <GripVertical size={20} />
           </div>
 
           <div class="move-buttons">
@@ -400,7 +444,6 @@
     cursor: pointer;
     transition: transform 0.15s ease, background 0.15s, box-shadow 0.15s;
     user-select: none;
-    touch-action: pan-y;
   }
 
   /* During active drag: non-dragged items animate transforms smoothly */
@@ -476,6 +519,26 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .drag-handle {
+    touch-action: none;
+    cursor: grab;
+    color: #555;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 4px;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+    color: var(--color-text);
+  }
+
+  .queue-item.dragging .drag-handle {
+    cursor: grabbing;
   }
 
   .move-buttons {
