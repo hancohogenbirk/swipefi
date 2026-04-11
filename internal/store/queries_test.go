@@ -544,45 +544,143 @@ func TestUpsertTrackBatch(t *testing.T) {
 	}
 }
 
-func TestMarkMissingAsDeleted_ReturnsPaths(t *testing.T) {
-	s := setupTestStore(t)
-	ctx := context.Background()
+func TestCleanupMissingTracks(t *testing.T) {
+	t.Run("externally removed file is purged from DB", func(t *testing.T) {
+		s := setupTestStore(t)
+		ctx := context.Background()
 
-	dir := t.TempDir()
-	musicDir := filepath.Join(dir, "music")
-	if err := os.MkdirAll(filepath.Join(musicDir, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+		dir := t.TempDir()
+		musicDir := filepath.Join(dir, "music")
+		deleteDir := filepath.Join(musicDir, "to_delete")
+		if err := os.MkdirAll(filepath.Join(musicDir, "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 
-	// Set the store's musicDir to match the real temp dir used by this test
-	s.SetMusicDir(musicDir)
+		s.SetMusicDir(musicDir)
 
-	realFile := filepath.Join(musicDir, "sub", "exists.flac")
-	if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+		realFile := filepath.Join(musicDir, "sub", "exists.flac")
+		if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
-	existsTrack := newTrack("sub/exists.flac", "Exists", "", "")
-	existsTrack.MusicDir = musicDir
-	if err := s.UpsertTrack(ctx, existsTrack); err != nil {
-		t.Fatal(err)
-	}
-	goneTrack := newTrack("sub/gone.flac", "Gone", "", "")
-	goneTrack.MusicDir = musicDir
-	if err := s.UpsertTrack(ctx, goneTrack); err != nil {
-		t.Fatal(err)
-	}
+		existsTrack := newTrack("sub/exists.flac", "Exists", "", "")
+		existsTrack.MusicDir = musicDir
+		if err := s.UpsertTrack(ctx, existsTrack); err != nil {
+			t.Fatal(err)
+		}
+		goneTrack := newTrack("sub/gone.flac", "Gone", "", "")
+		goneTrack.MusicDir = musicDir
+		if err := s.UpsertTrack(ctx, goneTrack); err != nil {
+			t.Fatal(err)
+		}
 
-	existing := map[string]bool{"sub/exists.flac": true}
-	count, paths, err := s.MarkMissingAsDeleted(ctx, existing, musicDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 deleted, got %d", count)
-	}
-	if len(paths) != 1 || paths[0] != "sub/gone.flac" {
-		t.Errorf("expected paths=[sub/gone.flac], got %v", paths)
-	}
+		// Get the gone track's ID before cleanup
+		tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+		var goneID int64
+		for _, tr := range tracks {
+			if tr.Path == "sub/gone.flac" {
+				goneID = tr.ID
+			}
+		}
+
+		existing := map[string]bool{"sub/exists.flac": true}
+		// File not in to_delete either — should be purged
+		softDeleted, purged, deletedPaths, purgedPaths, err := s.CleanupMissingTracks(ctx, existing, musicDir, deleteDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if softDeleted != 0 {
+			t.Errorf("expected 0 soft-deleted, got %d", softDeleted)
+		}
+		if purged != 1 {
+			t.Errorf("expected 1 purged, got %d", purged)
+		}
+		if len(deletedPaths) != 0 {
+			t.Errorf("expected no deleted paths, got %v", deletedPaths)
+		}
+		if len(purgedPaths) != 1 || purgedPaths[0] != "sub/gone.flac" {
+			t.Errorf("expected purgedPaths=[sub/gone.flac], got %v", purgedPaths)
+		}
+
+		// Track should be completely gone from DB
+		_, err = s.GetTrack(ctx, goneID)
+		if !errors.Is(err, ErrTrackNotFound) {
+			t.Errorf("expected ErrTrackNotFound for purged track, got %v", err)
+		}
+	})
+
+	t.Run("user-rejected file in to_delete is soft-deleted", func(t *testing.T) {
+		s := setupTestStore(t)
+		ctx := context.Background()
+
+		dir := t.TempDir()
+		musicDir := filepath.Join(dir, "music")
+		deleteDir := filepath.Join(musicDir, "to_delete")
+		if err := os.MkdirAll(filepath.Join(musicDir, "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Create the file in to_delete (simulating user rejection)
+		if err := os.MkdirAll(filepath.Join(deleteDir, "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(deleteDir, "sub", "gone.flac"), []byte("data"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		s.SetMusicDir(musicDir)
+
+		realFile := filepath.Join(musicDir, "sub", "exists.flac")
+		if err := os.WriteFile(realFile, []byte("data"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		existsTrack := newTrack("sub/exists.flac", "Exists", "", "")
+		existsTrack.MusicDir = musicDir
+		if err := s.UpsertTrack(ctx, existsTrack); err != nil {
+			t.Fatal(err)
+		}
+		goneTrack := newTrack("sub/gone.flac", "Gone", "", "")
+		goneTrack.MusicDir = musicDir
+		if err := s.UpsertTrack(ctx, goneTrack); err != nil {
+			t.Fatal(err)
+		}
+
+		// Get the gone track's ID before cleanup
+		tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+		var goneID int64
+		for _, tr := range tracks {
+			if tr.Path == "sub/gone.flac" {
+				goneID = tr.ID
+			}
+		}
+
+		existing := map[string]bool{"sub/exists.flac": true}
+		// File exists in to_delete — should be soft-deleted
+		softDeleted, purged, deletedPaths, purgedPaths, err := s.CleanupMissingTracks(ctx, existing, musicDir, deleteDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if softDeleted != 1 {
+			t.Errorf("expected 1 soft-deleted, got %d", softDeleted)
+		}
+		if purged != 0 {
+			t.Errorf("expected 0 purged, got %d", purged)
+		}
+		if len(deletedPaths) != 1 || deletedPaths[0] != "sub/gone.flac" {
+			t.Errorf("expected deletedPaths=[sub/gone.flac], got %v", deletedPaths)
+		}
+		if len(purgedPaths) != 0 {
+			t.Errorf("expected no purged paths, got %v", purgedPaths)
+		}
+
+		// Track should still exist in DB with deleted=1
+		got, err := s.GetTrack(ctx, goneID)
+		if err != nil {
+			t.Fatalf("expected track to still exist in DB, got %v", err)
+		}
+		if !got.Deleted {
+			t.Error("expected deleted=true for soft-deleted track")
+		}
+	})
 }
 

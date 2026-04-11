@@ -124,7 +124,7 @@ func TestScan_ForceRescanReReadsMetadata(t *testing.T) {
 	}
 }
 
-func TestScan_MissingFilesSoftDeleted(t *testing.T) {
+func TestScan_MissingFilesPurged(t *testing.T) {
 	musicDir, s, sc := setupScannerTest(t)
 	ctx := context.Background()
 
@@ -136,10 +136,57 @@ func TestScan_MissingFilesSoftDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Remove one file
+	// Remove one file (not placed in to_delete — simulates external removal)
 	os.Remove(filepath.Join(musicDir, "Artist/Album/WillRemove.flac"))
 
-	// Rescan — missing file should be soft-deleted
+	// Rescan — missing file should be purged (not in to_delete)
+	if _, err := sc.Scan(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should NOT appear in deleted list (purged, not soft-deleted)
+	deleted, err := s.ListDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 0 {
+		t.Errorf("expected 0 soft-deleted tracks (externally removed should be purged), got %d", len(deleted))
+	}
+
+	// Remaining track should still be active
+	active, err := s.TrackCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Errorf("expected 1 active track, got %d", active)
+	}
+}
+
+func TestScan_MissingFilesSoftDeletedWhenInToDelete(t *testing.T) {
+	musicDir, s, sc := setupScannerTest(t)
+	ctx := context.Background()
+
+	createAudioFile(t, musicDir, "Artist/Album/Song.flac")
+	createAudioFile(t, musicDir, "Artist/Album/WillReject.flac")
+
+	// Scan both files
+	if _, err := sc.Scan(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate user rejection: move file to to_delete and remove from original location
+	deleteDir := DeleteDir(musicDir)
+	destDir := filepath.Join(deleteDir, "Artist", "Album")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destDir, "WillReject.flac"), []byte("fake audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(musicDir, "Artist/Album/WillReject.flac"))
+
+	// Rescan — missing file exists in to_delete, should be soft-deleted
 	if _, err := sc.Scan(ctx, false); err != nil {
 		t.Fatal(err)
 	}
@@ -151,8 +198,8 @@ func TestScan_MissingFilesSoftDeleted(t *testing.T) {
 	if len(deleted) != 1 {
 		t.Errorf("expected 1 soft-deleted track, got %d", len(deleted))
 	}
-	if len(deleted) > 0 && deleted[0].Title != "WillRemove" {
-		t.Errorf("expected deleted track 'WillRemove', got %q", deleted[0].Title)
+	if len(deleted) > 0 && deleted[0].Title != "WillReject" {
+		t.Errorf("expected deleted track 'WillReject', got %q", deleted[0].Title)
 	}
 
 	// Remaining track should still be active

@@ -67,62 +67,87 @@ func (s *Store) UpsertTrack(ctx context.Context, t *Track) error {
 	return nil
 }
 
-// MarkMissingAsDeleted marks tracks as deleted if their file no longer exists on disk.
-// Uses existingPaths from the walk as a fast check, then does an os.Stat for any
-// candidate not in the map (handles transient walk errors over network filesystems).
-func (s *Store) MarkMissingAsDeleted(ctx context.Context, existingPaths map[string]bool, musicDir string) (int, []string, error) {
+// CleanupMissingTracks handles tracks whose files no longer exist at their original location.
+// User-rejected tracks (found in deleteDir) are soft-deleted (deleted=1, restorable).
+// Externally removed tracks (not in deleteDir either) are purged from the DB entirely.
+func (s *Store) CleanupMissingTracks(ctx context.Context, existingPaths map[string]bool, musicDir, deleteDir string) (softDeleted int, purged int, deletedPaths []string, purgedPaths []string, err error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT id, path FROM tracks WHERE deleted = 0 AND music_dir = ?", musicDir)
 	if err != nil {
-		return 0, nil, fmt.Errorf("query tracks: %w", err)
+		return 0, 0, nil, nil, fmt.Errorf("query tracks: %w", err)
 	}
 	defer rows.Close()
 
-	var toDelete []int64
-	var deletedPaths []string
+	var toSoftDelete []int64
+	var toPurge []int64
 	for rows.Next() {
 		var id int64
 		var path string
 		if err := rows.Scan(&id, &path); err != nil {
-			return 0, nil, fmt.Errorf("scan: %w", err)
+			return 0, 0, nil, nil, fmt.Errorf("scan: %w", err)
 		}
 		if existingPaths[path] {
 			continue
 		}
-		// Walk didn't find it — double-check with stat before marking deleted
+		// Walk didn't find it — double-check with stat before taking action
 		fullPath := filepath.Join(musicDir, filepath.FromSlash(path))
 		if _, err := os.Stat(fullPath); err == nil {
 			continue // file exists, walk just missed it
 		}
-		toDelete = append(toDelete, id)
-		deletedPaths = append(deletedPaths, path)
+		// Check if file exists in to_delete directory (user-rejected)
+		deletePath := filepath.Join(deleteDir, filepath.FromSlash(path))
+		if _, statErr := os.Stat(deletePath); statErr == nil {
+			// File is in to_delete — user rejected it, soft-delete
+			toSoftDelete = append(toSoftDelete, id)
+			deletedPaths = append(deletedPaths, path)
+		} else {
+			// File is nowhere — externally removed, purge from DB
+			toPurge = append(toPurge, id)
+			purgedPaths = append(purgedPaths, path)
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return 0, nil, err
+		return 0, 0, nil, nil, err
 	}
 
-	if len(toDelete) > 0 {
+	if len(toSoftDelete)+len(toPurge) > 0 {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			return 0, nil, fmt.Errorf("begin tx: %w", err)
+			return 0, 0, nil, nil, fmt.Errorf("begin tx: %w", err)
 		}
 		defer tx.Rollback()
 
-		stmt, err := tx.PrepareContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?")
-		if err != nil {
-			return 0, nil, fmt.Errorf("prepare mark deleted: %w", err)
-		}
-		defer stmt.Close()
-		for _, id := range toDelete {
-			if _, err := stmt.ExecContext(ctx, id); err != nil {
-				slog.Warn("failed to mark track deleted", "id", id, "err", err)
+		if len(toSoftDelete) > 0 {
+			stmt, err := tx.PrepareContext(ctx, "UPDATE tracks SET deleted = 1 WHERE id = ?")
+			if err != nil {
+				return 0, 0, nil, nil, fmt.Errorf("prepare mark deleted: %w", err)
+			}
+			defer stmt.Close()
+			for _, id := range toSoftDelete {
+				if _, err := stmt.ExecContext(ctx, id); err != nil {
+					slog.Warn("failed to mark track deleted", "id", id, "err", err)
+				}
 			}
 		}
+
+		if len(toPurge) > 0 {
+			stmt, err := tx.PrepareContext(ctx, "DELETE FROM tracks WHERE id = ?")
+			if err != nil {
+				return 0, 0, nil, nil, fmt.Errorf("prepare purge: %w", err)
+			}
+			defer stmt.Close()
+			for _, id := range toPurge {
+				if _, err := stmt.ExecContext(ctx, id); err != nil {
+					slog.Warn("failed to purge track", "id", id, "err", err)
+				}
+			}
+		}
+
 		if err := tx.Commit(); err != nil {
-			return 0, nil, fmt.Errorf("commit mark deleted: %w", err)
+			return 0, 0, nil, nil, fmt.Errorf("commit cleanup: %w", err)
 		}
 	}
 
-	return len(toDelete), deletedPaths, nil
+	return len(toSoftDelete), len(toPurge), deletedPaths, purgedPaths, nil
 }
 
 // UpsertTrackBatch inserts or updates multiple tracks in a single transaction.

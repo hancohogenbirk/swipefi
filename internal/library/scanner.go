@@ -244,20 +244,24 @@ func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 	// Skip if walk found no files (likely mount not ready)
 	// NOTE: keep Scanning=true until cleanup is done — the soft-delete
 	// phase modifies the DB and track counts change during this time.
-	var orphaned int
+	var softDeleted, purged int
 	if count > 0 {
 		sc.mu.Lock()
 		sc.status.Phase = "cleanup"
 		sc.mu.Unlock()
-		// Normal rescan — soft-delete missing tracks (user can restore)
-		var deletedPaths []string
+		deleteDir := DeleteDir(musicDir)
+		var deletedPaths, purgedPaths []string
 		var markErr error
-		orphaned, deletedPaths, markErr = sc.store.MarkMissingAsDeleted(scanCtx, existingPaths, musicDir)
+		softDeleted, purged, deletedPaths, purgedPaths, markErr = sc.store.CleanupMissingTracks(scanCtx, existingPaths, musicDir, deleteDir)
 		if markErr != nil {
-			slog.Warn("cleanup orphaned tracks failed", "err", markErr)
-		} else if orphaned > 0 {
-			slog.Info("marked orphaned tracks as deleted", "count", orphaned)
+			slog.Warn("cleanup missing tracks failed", "err", markErr)
+		} else if softDeleted+purged > 0 {
+			slog.Info("cleaned up missing tracks", "soft_deleted", softDeleted, "purged", purged)
 			for _, p := range deletedPaths {
+				dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
+				CleanupEmptyDirs(dir, musicDir)
+			}
+			for _, p := range purgedPaths {
 				dir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(p)))
 				CleanupEmptyDirs(dir, musicDir)
 			}
@@ -271,7 +275,7 @@ func (sc *Scanner) Scan(ctx context.Context, force bool) (int, error) {
 	sc.initialScan = false
 	sc.mu.Unlock()
 
-	slog.Info("library scan complete", "tracks_found", count, "orphaned", orphaned)
+	slog.Info("library scan complete", "tracks_found", count, "soft_deleted", softDeleted, "purged", purged)
 	return count, nil
 }
 
