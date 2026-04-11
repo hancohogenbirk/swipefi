@@ -12,28 +12,34 @@
 
   const SCAN_POLL_INTERVAL_MS = 500;
   const SESSION_KEY_TAB = 'swipefi-tab';
+  const SESSION_KEY_PHASE = 'swipefi-phase';
 
   type AppPhase = 'loading' | 'choose-dir' | 'setup' | 'main';
   type Tab = 'folders' | 'player' | 'settings';
 
-  let appPhase = $state<AppPhase>('loading');
+  let savedPhase = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(SESSION_KEY_PHASE) : null) as AppPhase | null;
+  let appPhase = $state<AppPhase>(savedPhase === 'main' ? 'main' : 'loading');
   let savedTab = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(SESSION_KEY_TAB) : null) as Tab | null;
   let activeTab = $state<Tab>(savedTab || 'folders');
   let showQueue = $state(false);
   let showDeletedManager = $state(false);
 
-  // Persist active tab across refreshes
+  // Persist active tab and app phase across refreshes
   $effect(() => {
     sessionStorage.setItem(SESSION_KEY_TAB, activeTab);
+  });
+  $effect(() => {
+    sessionStorage.setItem(SESSION_KEY_PHASE, appPhase);
   });
 
   // Track previous connected state to detect device loss
   let wasConnected = $state(false);
+  let initComplete = $state(false);
 
   // Watch for device disconnection (connected goes from true to false)
   $effect(() => {
     const connected = playerState.connected;
-    if (wasConnected && !connected && appPhase === 'main') {
+    if (initComplete && wasConnected && !connected && appPhase === 'main') {
       appPhase = 'setup';
     }
     wasConnected = connected;
@@ -97,11 +103,13 @@
     history.pushState(null, '');
 
     try {
+      const startedFromCache = appPhase === 'main';
       const config = await api.config();
       connectWebSocket();
 
       if (!config.music_dir) {
         appPhase = 'choose-dir';
+        initComplete = true;
         return;
       }
 
@@ -114,12 +122,18 @@
       }
 
       // Discover devices
-      devices = await api.devices();
-      if (devices.length === 0) {
-        try {
-          devices = await api.scanDevices();
-        } catch {
-          // scan can be slow, don't block
+      if (startedFromCache) {
+        // Fire-and-forget: don't block the UI for device discovery
+        api.devices().then(d => { devices = d; }).catch(() => {});
+        api.scanDevices().then(d => { devices = d; }).catch(() => {});
+      } else {
+        devices = await api.devices();
+        if (devices.length === 0) {
+          try {
+            devices = await api.scanDevices();
+          } catch {
+            // scan can be slow, don't block
+          }
         }
       }
 
@@ -132,8 +146,10 @@
       } else {
         appPhase = 'setup';
       }
+      initComplete = true;
     } catch (e) {
       console.error('[swipefi] init error:', e);
+      initComplete = true;
       appPhase = 'choose-dir';
     }
   });

@@ -121,6 +121,12 @@ func (p *Player) SetTransport(t dlna.Transporter) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.transport = t
+	p.pollErrors = 0
+	if t != nil {
+		p.startPollingLocked(p.appCtx)
+	} else {
+		p.stopPollingLocked()
+	}
 }
 
 // HasTransport returns true if a DLNA transport is currently set.
@@ -565,15 +571,50 @@ func (p *Player) stopPollingLocked() {
 func (p *Player) pollLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	lastIdleCheck := time.Time{}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			p.mu.Lock()
+			isIdle := p.state == StateIdle
+			p.mu.Unlock()
+
+			if isIdle {
+				if time.Since(lastIdleCheck) < 5*time.Second {
+					continue
+				}
+				lastIdleCheck = time.Now()
+			}
 			p.pollOnce(ctx)
 		}
 	}
+}
+
+func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter) {
+	_, err := transport.GetState(ctx)
+	if err != nil {
+		slog.Debug("heartbeat error", "err", err)
+		p.mu.Lock()
+		p.pollErrors++
+		if p.pollErrors >= 3 {
+			slog.Warn("device unreachable (idle heartbeat), disconnecting", "consecutive_errors", p.pollErrors)
+			p.stopPollingLocked()
+			p.state = StateIdle
+			p.transport = nil
+			p.queue = nil
+			p.currentStreamURL = ""
+			p.pollErrors = 0
+			p.notify()
+		}
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Lock()
+	p.pollErrors = 0
+	p.mu.Unlock()
 }
 
 func (p *Player) pollOnce(ctx context.Context) {
@@ -582,7 +623,11 @@ func (p *Player) pollOnce(ctx context.Context) {
 	state := p.state
 	p.mu.Unlock()
 
-	if transport == nil || state == StateIdle {
+	if transport == nil {
+		return
+	}
+	if state == StateIdle {
+		p.heartbeatCheck(ctx, transport)
 		return
 	}
 
