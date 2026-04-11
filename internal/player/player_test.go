@@ -2,6 +2,7 @@ package player
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ type mockTransport struct {
 	stopCalls   int
 	setURICalls int
 	playErr     error
+	getStateErr error
 	// When true, SetURI/Play/Stop check ctx.Err() first and return it if
 	// non-nil. This catches bugs where a cancelled context is passed.
 	checkCtx bool
@@ -86,6 +88,9 @@ func (m *mockTransport) Seek(_ context.Context, _ time.Duration) error {
 func (m *mockTransport) GetState(_ context.Context) (dlna.TransportState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.getStateErr != nil {
+		return "", m.getStateErr
+	}
 	return m.state, nil
 }
 
@@ -318,5 +323,169 @@ func TestPollOnce_NaturalEndStartsNextTrack(t *testing.T) {
 
 	if newCalls < 1 {
 		t.Errorf("expected at least 1 new Play call for next track, got %d", newCalls)
+	}
+}
+
+func TestHeartbeatDetectsDisconnect(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	// Stop the background poll loop so we control timing
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle // idle but connected — heartbeat territory
+	p.mu.Unlock()
+
+	// Record state changes via onChange
+	var lastState PlayerState
+	var stateMu sync.Mutex
+	p.SetOnChange(func(ps PlayerState) {
+		stateMu.Lock()
+		lastState = ps
+		stateMu.Unlock()
+	})
+
+	// Make GetState fail
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Poll 3 times — should trigger disconnect after 3 consecutive errors
+	for i := 0; i < 3; i++ {
+		p.pollOnce(ctx)
+	}
+
+	p.mu.Lock()
+	transport := p.transport
+	state := p.state
+	p.mu.Unlock()
+
+	if transport != nil {
+		t.Error("expected transport to be nil after 3 heartbeat failures")
+	}
+	if state != StateIdle {
+		t.Errorf("expected StateIdle, got %s", state)
+	}
+
+	stateMu.Lock()
+	connected := lastState.Connected
+	stateMu.Unlock()
+
+	if connected {
+		t.Error("expected last broadcast to have connected=false")
+	}
+}
+
+func TestHeartbeatResetsOnSuccess(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	// Stop background poll loop
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	// Fail twice
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("timeout")
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+	p.pollOnce(ctx)
+
+	// Succeed — should reset error counter
+	mt.mu.Lock()
+	mt.getStateErr = nil
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	errors := p.pollErrors
+	transport := p.transport
+	p.mu.Unlock()
+
+	if errors != 0 {
+		t.Errorf("expected pollErrors to reset to 0, got %d", errors)
+	}
+	if transport == nil {
+		t.Error("expected transport to still be set after error recovery")
+	}
+}
+
+func TestSetTransportStartsPolling(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	// Before SetTransport: no polling
+	p.mu.Lock()
+	hasCancel := p.pollCancel != nil
+	p.mu.Unlock()
+
+	if hasCancel {
+		t.Error("expected no pollCancel before SetTransport")
+	}
+
+	// SetTransport with non-nil transport should start polling
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	hasCancel = p.pollCancel != nil
+	p.mu.Unlock()
+
+	if !hasCancel {
+		t.Error("expected pollCancel to be set after SetTransport")
+	}
+
+	// SetTransport(nil) should stop polling
+	p.SetTransport(nil)
+
+	p.mu.Lock()
+	hasCancel = p.pollCancel != nil
+	p.mu.Unlock()
+
+	if hasCancel {
+		t.Error("expected pollCancel to be nil after SetTransport(nil)")
 	}
 }
