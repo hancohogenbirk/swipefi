@@ -32,6 +32,7 @@
   let isDragging = $state(false);
   let dragDeltaY = $state(0);
   let dragOriginY = $state(0);
+  let dragScrollOffset = $state(0);
   let dragScrollStart = 0;
   let itemHeight = 56;
 
@@ -116,10 +117,16 @@
 
     if (distFromTop < edgeZone) {
       const speed = Math.round(2 + (1 - distFromTop / edgeZone) * 10);
-      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, -speed), 16);
+      autoScrollTimer = setInterval(() => {
+        listEl?.scrollBy(0, -speed);
+        updateScrollOffset();
+      }, 16);
     } else if (distFromBottom < edgeZone) {
       const speed = Math.round(2 + (1 - distFromBottom / edgeZone) * 10);
-      autoScrollTimer = setInterval(() => listEl?.scrollBy(0, speed), 16);
+      autoScrollTimer = setInterval(() => {
+        listEl?.scrollBy(0, speed);
+        updateScrollOffset();
+      }, 16);
     }
   }
 
@@ -138,18 +145,24 @@
     targetIndex = idx;
     dragOriginY = clientY;
     dragScrollStart = listEl?.scrollTop ?? 0;
+    dragScrollOffset = 0;
     dragDeltaY = 0;
     measureItemHeight();
     if (navigator.vibrate) navigator.vibrate(HAPTIC_DURATION_MS);
   }
 
+  function updateScrollOffset() {
+    dragScrollOffset = (listEl?.scrollTop ?? 0) - dragScrollStart;
+    // Recompute target index with updated scroll
+    const delta = dragDeltaY + dragScrollOffset;
+    const indexOffset = Math.round(delta / itemHeight);
+    targetIndex = Math.max(0, Math.min(tracks.length - 1, (dragOriginalIndex ?? 0) + indexOffset));
+  }
+
   function updateDrag(clientY: number) {
     dragDeltaY = clientY - dragOriginY;
     handleEdgeScroll(clientY);
-    const scrollDelta = (listEl?.scrollTop ?? 0) - dragScrollStart;
-    const delta = dragDeltaY + scrollDelta;
-    const indexOffset = Math.round(delta / itemHeight);
-    targetIndex = Math.max(0, Math.min(tracks.length - 1, (dragOriginalIndex ?? 0) + indexOffset));
+    updateScrollOffset();
   }
 
   function finishDrag() {
@@ -165,6 +178,7 @@
     targetIndex = null;
     dragDeltaY = 0;
     dragOriginY = 0;
+    dragScrollOffset = 0;
   }
 
   // --- Touch drag handlers (mobile) ---
@@ -239,8 +253,8 @@
     if (!isDragging || dragOriginalIndex === null || targetIndex === null) return '';
 
     if (idx === dragOriginalIndex) {
-      // Dragged item follows the finger — no CSS transition
-      return `transform: translateY(${dragDeltaY}px); z-index: 10;`;
+      // Dragged item follows the finger — compensate for container scroll
+      return `transform: translateY(${dragDeltaY + dragScrollOffset}px); z-index: 10;`;
     }
 
     // Shift other items to create a visual gap at the drop target
