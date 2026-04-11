@@ -353,6 +353,7 @@
     flex-direction: column;
     gap: 2px;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
   }
 
@@ -384,6 +385,7 @@
     font-size: 1rem;
     cursor: pointer;
     flex: 1;
+    min-width: 0;
     text-align: left;
     padding: 0;
   }

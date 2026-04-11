@@ -14,18 +14,6 @@
 
   let showPlaceholder = $state(true);
 
-  let formatInfo = $derived.by(() => {
-    const parts: string[] = [];
-    if (track.format) parts.push(track.format.toUpperCase());
-    if (track.sample_rate_hz) {
-      const khz = track.sample_rate_hz / 1000;
-      parts.push(Number.isInteger(khz) ? `${khz} kHz` : `${khz.toFixed(1)} kHz`);
-    }
-    if (track.bit_depth) parts.push(`${track.bit_depth}-bit`);
-    if (track.bitrate_kbps) parts.push(`${Math.round(track.bitrate_kbps).toLocaleString()} kbps`);
-    return parts.join(' \u00B7 '); // middle dot separator
-  });
-
   const SWIPE_THRESHOLD = 80;
   const ROTATION_FACTOR = 0.1;
 
@@ -157,9 +145,6 @@
     <h2 class="title">{track.title}</h2>
     <p class="artist">{track.artist || 'Unknown Artist'}</p>
     <p class="album">{track.album || 'Unknown Album'}</p>
-    {#if formatInfo}
-      <p class="format-info">{formatInfo}</p>
-    {/if}
     <p class="play-count">Played {track.play_count} time{track.play_count !== 1 ? 's' : ''}</p>
   </div>
 </div>
@@ -277,13 +262,6 @@
     font-size: 0.85rem;
     color: #777;
     margin: 0.15rem 0 0;
-  }
-
-  .format-info {
-    font-size: 0.7rem;
-    color: #555;
-    margin: 0.25rem 0 0;
-    letter-spacing: 0.02em;
   }
 
   .play-count {

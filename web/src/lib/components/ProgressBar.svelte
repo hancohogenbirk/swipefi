@@ -11,6 +11,20 @@
   let ps = $derived(getPlayerState());
   let idle = $derived(ps.state === 'idle');
 
+  let formatInfo = $derived.by(() => {
+    const t = ps.track;
+    if (!t) return '';
+    const parts: string[] = [];
+    if (t.format) parts.push(t.format.toUpperCase());
+    if (t.sample_rate_hz) {
+      const khz = t.sample_rate_hz / 1000;
+      parts.push(Number.isInteger(khz) ? `${khz} kHz` : `${khz.toFixed(1)} kHz`);
+    }
+    if (t.bit_depth) parts.push(`${t.bit_depth}-bit`);
+    if (t.bitrate_kbps) parts.push(`${Math.round(t.bitrate_kbps).toLocaleString()} kbps`);
+    return parts.join(' \u00B7 ');
+  });
+
   let positionMs = $derived(
     idle ? 0 :
     ps.state === 'loading' ? 0 :
@@ -81,6 +95,9 @@
   </div>
   <div class="time-row">
     <span class="time elapsed">{formatTime(positionMs)}</span>
+    {#if formatInfo}
+      <span class="format-info">{formatInfo}</span>
+    {/if}
     <span class="time remaining">-{formatTime(durationMs - positionMs)}</span>
   </div>
 </div>
@@ -141,6 +158,16 @@
     font-size: 0.75rem;
     color: #999;
     font-variant-numeric: tabular-nums;
+  }
+
+  .format-info {
+    font-size: 0.65rem;
+    color: #666;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .progress-container.disabled {
