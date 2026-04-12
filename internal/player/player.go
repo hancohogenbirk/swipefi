@@ -29,7 +29,7 @@ const (
 const (
 	playCountThresholdMs = 60_000
 	dlnaRetryDelay       = 500 * time.Millisecond
-	maxPollErrors        = 10
+	disconnectTimeout    = 30 * time.Second
 )
 
 // PlayerState is the full state broadcast to WebSocket clients.
@@ -75,8 +75,8 @@ type Player struct {
 	positionMs int64
 	durationMs int64
 
-	// Consecutive poll errors — disconnect after maxPollErrors
-	pollErrors int
+	// Time of first consecutive poll error — disconnect after disconnectTimeout
+	firstPollErrorAt time.Time
 
 	// Queue metadata for recovery after disconnect
 	queueFolder    string
@@ -130,7 +130,7 @@ func (p *Player) SetDirs(musicDir, deleteDir string) {
 func (p *Player) SetTransport(t dlna.Transporter) {
 	p.mu.Lock()
 	p.transport = t
-	p.pollErrors = 0
+	p.firstPollErrorAt = time.Time{}
 	if t != nil {
 		p.startPollingLocked(p.appCtx)
 		// Try to recover the renderer's current playback state
@@ -731,25 +731,23 @@ func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter)
 	if err != nil {
 		slog.Debug("heartbeat error", "err", err)
 		p.mu.Lock()
-		p.pollErrors++
-		if p.pollErrors >= 5 {
-			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
-		}
-		if p.pollErrors >= maxPollErrors {
-			slog.Warn("device unreachable (idle heartbeat), disconnecting", "consecutive_errors", p.pollErrors)
+		if p.firstPollErrorAt.IsZero() {
+			p.firstPollErrorAt = time.Now()
+		} else if time.Since(p.firstPollErrorAt) > disconnectTimeout {
+			slog.Warn("device unreachable (idle heartbeat), disconnecting", "error_duration", time.Since(p.firstPollErrorAt))
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
 			p.queue = nil
 			p.currentStreamURL = ""
-			p.pollErrors = 0
+			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
 		p.mu.Unlock()
 		return
 	}
 	p.mu.Lock()
-	p.pollErrors = 0
+	p.firstPollErrorAt = time.Time{}
 	p.mu.Unlock()
 }
 
@@ -772,18 +770,16 @@ func (p *Player) pollOnce(ctx context.Context) {
 	if err != nil {
 		slog.Debug("poll position error", "err", err)
 		p.mu.Lock()
-		p.pollErrors++
-		if p.pollErrors >= 5 {
-			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
-		}
-		if p.pollErrors >= maxPollErrors {
-			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
+		if p.firstPollErrorAt.IsZero() {
+			p.firstPollErrorAt = time.Now()
+		} else if time.Since(p.firstPollErrorAt) > disconnectTimeout {
+			slog.Warn("device unreachable, disconnecting", "error_duration", time.Since(p.firstPollErrorAt))
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
 			p.queue = nil
 			p.currentStreamURL = ""
-			p.pollErrors = 0
+			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
 		p.mu.Unlock()
@@ -795,18 +791,16 @@ func (p *Player) pollOnce(ctx context.Context) {
 	if err != nil {
 		slog.Debug("poll state error", "err", err)
 		p.mu.Lock()
-		p.pollErrors++
-		if p.pollErrors >= 5 {
-			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
-		}
-		if p.pollErrors >= maxPollErrors {
-			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
+		if p.firstPollErrorAt.IsZero() {
+			p.firstPollErrorAt = time.Now()
+		} else if time.Since(p.firstPollErrorAt) > disconnectTimeout {
+			slog.Warn("device unreachable, disconnecting", "error_duration", time.Since(p.firstPollErrorAt))
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
 			p.queue = nil
 			p.currentStreamURL = ""
-			p.pollErrors = 0
+			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
 		p.mu.Unlock()
@@ -816,7 +810,7 @@ func (p *Player) pollOnce(ctx context.Context) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.pollErrors = 0
+	p.firstPollErrorAt = time.Time{}
 
 	// Don't update position during loading — renderer may report stale data
 	// from the previous track while transitioning. Also skip the external

@@ -375,10 +375,13 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 	mt.getStateErr = fmt.Errorf("connection refused")
 	mt.mu.Unlock()
 
-	// Poll 10 times — should trigger disconnect after maxPollErrors consecutive errors
-	for i := 0; i < 10; i++ {
-		p.pollOnce(ctx)
-	}
+	// Simulate: first error happened 31 seconds ago (past the 30s threshold)
+	p.mu.Lock()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	// Single poll should trigger disconnect since we're past the threshold
+	p.pollOnce(ctx)
 
 	p.mu.Lock()
 	transport := p.transport
@@ -386,7 +389,7 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 	p.mu.Unlock()
 
 	if transport != nil {
-		t.Error("expected transport to be nil after 10 heartbeat failures")
+		t.Error("expected transport to be nil after exceeding 30s error threshold")
 	}
 	if state != StateIdle {
 		t.Errorf("expected StateIdle, got %s", state)
@@ -401,7 +404,7 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 	}
 }
 
-func TestHeartbeatDoesNotDisconnect_Before10Errors(t *testing.T) {
+func TestHeartbeatDoesNotDisconnect_WithinTimeWindow(t *testing.T) {
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -429,8 +432,8 @@ func TestHeartbeatDoesNotDisconnect_Before10Errors(t *testing.T) {
 	mt.getStateErr = fmt.Errorf("connection refused")
 	mt.mu.Unlock()
 
-	// Poll 9 times — should NOT trigger disconnect
-	for i := 0; i < 9; i++ {
+	// Poll many times rapidly — all within 30s window, should NOT disconnect
+	for i := 0; i < 50; i++ {
 		p.pollOnce(ctx)
 	}
 
@@ -440,7 +443,7 @@ func TestHeartbeatDoesNotDisconnect_Before10Errors(t *testing.T) {
 	p.mu.Unlock()
 
 	if transport == nil {
-		t.Error("expected transport to still be set after 9 heartbeat failures")
+		t.Error("expected transport to still be set — errors within 30s window")
 	}
 	if state != StateIdle {
 		t.Errorf("expected StateIdle, got %s", state)
@@ -479,7 +482,7 @@ func TestHeartbeatResetsOnSuccess(t *testing.T) {
 	p.pollOnce(ctx)
 	p.pollOnce(ctx)
 
-	// Succeed — should reset error counter
+	// Succeed — should reset error timer
 	mt.mu.Lock()
 	mt.getStateErr = nil
 	mt.mu.Unlock()
@@ -487,12 +490,12 @@ func TestHeartbeatResetsOnSuccess(t *testing.T) {
 	p.pollOnce(ctx)
 
 	p.mu.Lock()
-	errors := p.pollErrors
+	errorReset := p.firstPollErrorAt.IsZero()
 	transport := p.transport
 	p.mu.Unlock()
 
-	if errors != 0 {
-		t.Errorf("expected pollErrors to reset to 0, got %d", errors)
+	if !errorReset {
+		t.Error("expected firstPollErrorAt to be zero after success")
 	}
 	if transport == nil {
 		t.Error("expected transport to still be set after error recovery")
@@ -1292,10 +1295,13 @@ func TestPollDisconnect_PreservesQueueMetadata(t *testing.T) {
 	mt.getPositionErr = fmt.Errorf("connection refused")
 	mt.mu.Unlock()
 
-	// Poll maxPollErrors times to trigger disconnect
-	for i := 0; i < 10; i++ {
-		p.pollOnce(ctx)
-	}
+	// Simulate: first error happened 31 seconds ago (past the 30s threshold)
+	p.mu.Lock()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	// Single poll should trigger disconnect since we're past the threshold
+	p.pollOnce(ctx)
 
 	p.mu.Lock()
 	transport := p.transport
@@ -1491,6 +1497,140 @@ func TestPollOnce_TransitioningDoesNotResetGracePeriod(t *testing.T) {
 	// Should still be loading
 	if state != StateLoading {
 		t.Errorf("expected StateLoading, got %s", state)
+	}
+}
+
+func TestTimeBasedDisconnect_NoDisconnectWithin30s(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Poll 50 times rapidly — all within 30s, should NOT disconnect
+	for i := 0; i < 50; i++ {
+		p.pollOnce(ctx)
+	}
+
+	p.mu.Lock()
+	transport := p.transport
+	p.mu.Unlock()
+
+	if transport == nil {
+		t.Error("expected transport to still be set — errors within 30s window")
+	}
+}
+
+func TestTimeBasedDisconnect_DisconnectsAfter30s(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Simulate: first error happened 31 seconds ago
+	p.mu.Lock()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	transport := p.transport
+	p.mu.Unlock()
+
+	if transport != nil {
+		t.Error("expected transport nil — errors exceeded 30s threshold")
+	}
+}
+
+func TestTimeBasedDisconnect_ResetsOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	// Fail a few times
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("timeout")
+	mt.mu.Unlock()
+	p.pollOnce(ctx)
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	hasError := !p.firstPollErrorAt.IsZero()
+	p.mu.Unlock()
+	if !hasError {
+		t.Error("expected firstPollErrorAt to be set after failures")
+	}
+
+	// Succeed — should reset
+	mt.mu.Lock()
+	mt.getStateErr = nil
+	mt.mu.Unlock()
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	reset := p.firstPollErrorAt.IsZero()
+	transport := p.transport
+	p.mu.Unlock()
+
+	if !reset {
+		t.Error("expected firstPollErrorAt to reset after success")
+	}
+	if transport == nil {
+		t.Error("expected transport to survive after error recovery")
 	}
 }
 
