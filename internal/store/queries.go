@@ -209,6 +209,27 @@ func (s *Store) GetTrack(ctx context.Context, id int64) (*Track, error) {
 	return &t, nil
 }
 
+// GetTrackByPath returns a non-deleted track by its relative path.
+func (s *Store) GetTrackByPath(ctx context.Context, path string) (*Track, error) {
+	var t Track
+	var lastPlayed sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps
+		FROM tracks WHERE path = ? AND deleted = 0 AND music_dir = ?
+	`, path, s.getMusicDir()).Scan(&t.ID, &t.Path, &t.Title, &t.Artist, &t.Album, &t.DurationMs, &t.Format,
+		&t.PlayCount, &t.AddedAt, &lastPlayed, &t.Deleted, &t.SampleRateHz, &t.BitDepth, &t.BitrateKbps)
+	if err == sql.ErrNoRows {
+		return nil, ErrTrackNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get track by path %s: %w", path, err)
+	}
+	if lastPlayed.Valid {
+		t.LastPlayed = &lastPlayed.Int64
+	}
+	return &t, nil
+}
+
 // ListTracks returns tracks in a folder recursively (for playback queue building).
 func (s *Store) ListTracks(ctx context.Context, folder, sortBy, order string) ([]Track, error) {
 	query := `SELECT id, path, title, artist, album, duration_ms, format, play_count, added_at, last_played, deleted, sample_rate_hz, bit_depth, bitrate_kbps

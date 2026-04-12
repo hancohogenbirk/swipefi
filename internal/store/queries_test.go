@@ -417,6 +417,54 @@ func TestHasTracksInFolder(t *testing.T) {
 	}
 }
 
+func TestGetTrackByPath_Found(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	track := newTrack("artist/album/01-song.flac", "Song", "Artist", "Album")
+	if err := s.UpsertTrack(ctx, track); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetTrackByPath(ctx, "artist/album/01-song.flac")
+	if err != nil {
+		t.Fatalf("GetTrackByPath: %v", err)
+	}
+	if got.Title != "Song" || got.Artist != "Artist" || got.Album != "Album" {
+		t.Errorf("unexpected track: %+v", got)
+	}
+}
+
+func TestGetTrackByPath_NotFound(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	_, err := s.GetTrackByPath(ctx, "nonexistent/path.flac")
+	if !errors.Is(err, ErrTrackNotFound) {
+		t.Errorf("expected ErrTrackNotFound, got %v", err)
+	}
+}
+
+func TestGetTrackByPath_IgnoresDeleted(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	track := newTrack("artist/album/01-song.flac", "Song", "Artist", "Album")
+	if err := s.UpsertTrack(ctx, track); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	if err := s.MarkDeleted(ctx, tracks[0].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.GetTrackByPath(ctx, "artist/album/01-song.flac")
+	if !errors.Is(err, ErrTrackNotFound) {
+		t.Errorf("expected ErrTrackNotFound for deleted track, got %v", err)
+	}
+}
+
 func TestConfig_SetAndGet(t *testing.T) {
 	s := setupTestStore(t)
 
