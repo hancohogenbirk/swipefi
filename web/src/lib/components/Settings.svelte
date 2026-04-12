@@ -91,6 +91,8 @@
   }
 
   let connectedDevice = $state('');
+  let deviceLoaded = $state(false);
+  let disconnecting = $state(false);
 
   async function loadDeviceInfo() {
     try {
@@ -98,15 +100,21 @@
       connectedDevice = config.connected_device || '';
     } catch {
       // ignore
+    } finally {
+      deviceLoaded = true;
     }
   }
 
   async function disconnect() {
+    if (disconnecting) return;
+    disconnecting = true;
     try {
       await api.disconnectDevice();
       onDisconnect?.();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Disconnect failed';
+    } finally {
+      disconnecting = false;
     }
   }
 
@@ -217,23 +225,29 @@
 
   <!-- Audio Device -->
   <div class="section-divider"></div>
-  <div class="settings-item device-item">
-    <Speaker size={20} />
-    <div class="item-content">
-      <span class="item-label">Audio Device</span>
-      <span class="item-value">{connectedDevice || 'Not connected'}</span>
+  {#if deviceLoaded}
+    <div class="settings-item device-item">
+      <Speaker size={20} />
+      <div class="item-content">
+        <span class="item-label">Audio Device</span>
+        <span class="item-value">{connectedDevice || 'Not connected'}</span>
+      </div>
+      {#if disconnecting}
+        <button class="disconnect-btn" disabled aria-label="Disconnecting">
+          <span class="spinner"></span>
+        </button>
+      {:else if connectedDevice && onDisconnect}
+        <button class="disconnect-btn" onclick={disconnect}>
+          <Unplug size={14} />
+          <span>Disconnect</span>
+        </button>
+      {:else if onSelectDevice}
+        <button class="select-device-btn" onclick={onSelectDevice}>
+          <span>Select</span>
+        </button>
+      {/if}
     </div>
-    {#if connectedDevice && onDisconnect}
-      <button class="disconnect-btn" onclick={disconnect}>
-        <Unplug size={14} />
-        <span>Disconnect</span>
-      </button>
-    {:else if onSelectDevice}
-      <button class="select-device-btn" onclick={onSelectDevice}>
-        <span>Select</span>
-      </button>
-    {/if}
-  </div>
+  {/if}
 </div>
 
 <style>
@@ -442,5 +456,20 @@
     font-size: 0.85rem;
     padding: 0.5rem;
     text-align: center;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
