@@ -3,17 +3,18 @@
 
   type Tab = 'folders' | 'player' | 'settings';
 
-  let { activeTab, onTabChange }: {
+  let { activeTab, onTabChange, disabled = false }: {
     activeTab: Tab;
     onTabChange: (tab: Tab) => void;
+    disabled?: boolean;
   } = $props();
 </script>
 
-<nav class="bottom-nav">
+<nav class="bottom-nav" class:disabled>
   <button
     class="nav-tab"
     class:active={activeTab === 'folders'}
-    onclick={() => onTabChange('folders')}
+    onclick={() => { if (disabled) return; onTabChange('folders'); }}
     aria-label="Folders"
     style="--tab-color: #1db954"
   >
@@ -24,7 +25,7 @@
   <button
     class="nav-tab"
     class:active={activeTab === 'player'}
-    onclick={() => onTabChange('player')}
+    onclick={() => { if (disabled) return; onTabChange('player'); }}
     aria-label="Now Playing"
     style="--tab-color: #4ec484"
   >
@@ -35,7 +36,7 @@
   <button
     class="nav-tab"
     class:active={activeTab === 'settings'}
-    onclick={() => onTabChange('settings')}
+    onclick={() => { if (disabled) return; onTabChange('settings'); }}
     aria-label="Settings"
     style="--tab-color: #7cb3ff"
   >
@@ -53,6 +54,11 @@
     background: #0d0d0d;
     border-top: 1px solid var(--color-bg-hover);
     flex-shrink: 0;
+  }
+
+  .bottom-nav.disabled {
+    opacity: 0.5;
+    pointer-events: none;
   }
 
   .nav-tab {

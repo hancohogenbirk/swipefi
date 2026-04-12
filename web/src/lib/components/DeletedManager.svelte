@@ -2,7 +2,9 @@
   import { api, type Track } from '../api/client';
   import { ArrowLeft, RotateCcw, Trash2, CheckSquare, Square, CheckSquare2 } from 'lucide-svelte';
 
-  let { onBack }: { onBack: () => void } = $props();
+  let { onBack, onBusyChange }: { onBack: () => void; onBusyChange?: (busy: boolean) => void } = $props();
+
+  $effect(() => { onBusyChange?.(busy); });
 
   let tracks = $state<Track[]>([]);
   let selected = $state<Set<number>>(new Set());
@@ -81,7 +83,7 @@
 
 <div class="deleted-manager">
   <header class="dm-header">
-    <button class="back-btn" onclick={onBack} aria-label="Back">
+    <button class="back-btn" onclick={onBack} disabled={busy} aria-label="Back">
       <ArrowLeft size={24} />
     </button>
     <h2>Marked for Deletion</h2>
@@ -198,6 +200,11 @@
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 50%;
+  }
+
+  .back-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   .actions-bar {
