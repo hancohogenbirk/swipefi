@@ -13,6 +13,9 @@
   let tracks = $state<Track[]>([]);
   let queuePos = $state(0);
   let loading = $state(true);
+  let queueFolder = $state('');
+  let queueSortBy = $state('');
+  let queueSortOrder = $state('');
 
   let ps = $derived(getPlayerState());
   let currentTrackId = $derived(ps.track?.id);
@@ -48,12 +51,26 @@
       const q = await api.queue();
       tracks = q.tracks ?? [];
       queuePos = q.position;
+      queueFolder = q.folder ?? '';
+      queueSortBy = q.sort_by ?? '';
+      queueSortOrder = q.sort_order ?? '';
     } catch {
       tracks = [];
     } finally {
       loading = false;
     }
     scrollToCurrent();
+  }
+
+  function formatSortLabel(sortBy: string, sortOrder: string): string {
+    const labels: Record<string, string> = {
+      'added_at': 'Date added',
+      'play_count': 'Play count',
+      'last_played': 'Last played',
+    };
+    const label = labels[sortBy] || sortBy;
+    const arrow = sortOrder === 'asc' ? '\u2191' : '\u2193';
+    return `${label} ${arrow}`;
   }
 
   function formatDate(timestamp: number): string {
@@ -321,6 +338,14 @@
     <span class="queue-count">{tracks.length} tracks</span>
   </header>
 
+  {#if queueFolder || queueSortBy}
+    <div class="queue-context">
+      {#if queueFolder}Playing from {queueFolder}{/if}
+      {#if queueFolder && queueSortBy} &middot; {/if}
+      {#if queueSortBy}{formatSortLabel(queueSortBy, queueSortOrder)}{/if}
+    </div>
+  {/if}
+
   {#if isDragging}
     <div class="drag-hint">Release to drop</div>
   {:else}
@@ -437,6 +462,16 @@
   .queue-count {
     font-size: 0.8rem;
     color: var(--color-text-secondary);
+  }
+
+  .queue-context {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #666;
+    padding: 0.2rem 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .back-btn {
