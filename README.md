@@ -12,6 +12,8 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Mini-player bar showing current track when browsing folders
 - Folder browser with one-tap playback
 - Reorderable queue with drag-to-reorder, skip-to, and sort-aware metadata column (play count or date added) with consistent icon and accent color styling
+- Queue context display showing source folder and sort order in the queue header
+- Swipe gestures in queue: swipe left to reject (delete), swipe right to remove from queue
 - Play count tracking (counts after 60 seconds of listening)
 - Live play count updates on the Now Playing screen via WebSocket
 - Audio format info on the now-playing card (sample rate, bit depth, bitrate) for FLAC files
