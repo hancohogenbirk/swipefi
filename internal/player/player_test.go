@@ -1489,3 +1489,56 @@ func TestPollOnce_TransitioningDoesNotResetGracePeriod(t *testing.T) {
 		t.Errorf("expected StateLoading, got %s", state)
 	}
 }
+
+func TestPlayCurrentLocked_SetsAggressivePollUntil(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	for i, name := range []string{"01-song.flac", "02-song.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/album/" + name, Title: fmt.Sprintf("Song %d", i+1),
+			Artist: "Artist", Album: "Album", DurationMs: 180000, Format: "flac",
+			AddedAt: int64(i + 1), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.mu.Unlock()
+
+	before := time.Now()
+	if err := p.PlayFolder(ctx, "artist/album", "added_at", "asc"); err != nil {
+		t.Fatalf("PlayFolder: %v", err)
+	}
+
+	p.mu.Lock()
+	aggressiveUntil := p.aggressivePollUntil
+	p.stopPollingLocked()
+	p.mu.Unlock()
+
+	// aggressivePollUntil should be ~10 seconds in the future
+	expected := before.Add(10 * time.Second)
+	if aggressiveUntil.Before(expected.Add(-1 * time.Second)) {
+		t.Errorf("aggressivePollUntil too early: %v, expected around %v", aggressiveUntil, expected)
+	}
+	if aggressiveUntil.After(expected.Add(1 * time.Second)) {
+		t.Errorf("aggressivePollUntil too late: %v, expected around %v", aggressiveUntil, expected)
+	}
+}

@@ -83,6 +83,9 @@ type Player struct {
 	queueSortBy    string
 	queueSortOrder string
 
+	// Fast polling after track change to detect playback start quickly
+	aggressivePollUntil time.Time
+
 	// Polling
 	pollCancel context.CancelFunc
 
@@ -387,6 +390,7 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	slog.Debug("playCurrentLocked: reset playCounted", "track_id", track.ID, "title", track.Title)
 
 	p.startPollingLocked(p.appCtx)
+	p.aggressivePollUntil = time.Now().Add(10 * time.Second)
 	p.notify()
 	return nil
 }
@@ -699,25 +703,24 @@ func (p *Player) stopPollingLocked() {
 }
 
 func (p *Player) pollLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	lastIdleCheck := time.Time{}
-
 	for {
+		p.mu.Lock()
+		interval := 1 * time.Second
+		if time.Now().Before(p.aggressivePollUntil) {
+			interval = 200 * time.Millisecond
+		}
+		state := p.state
+		p.mu.Unlock()
+
+		// Idle state polls less frequently
+		if state == StateIdle {
+			interval = 5 * time.Second
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			p.mu.Lock()
-			isIdle := p.state == StateIdle
-			p.mu.Unlock()
-
-			if isIdle {
-				if time.Since(lastIdleCheck) < 5*time.Second {
-					continue
-				}
-				lastIdleCheck = time.Now()
-			}
+		case <-time.After(interval):
 			p.pollOnce(ctx)
 		}
 	}
