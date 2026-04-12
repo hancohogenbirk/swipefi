@@ -1314,8 +1314,8 @@ func TestPollDisconnect_PreservesQueueMetadata(t *testing.T) {
 	if transport != nil {
 		t.Error("expected transport to be nil after disconnect")
 	}
-	if queue != nil {
-		t.Error("expected queue to be nil after disconnect")
+	if queue == nil {
+		t.Error("expected queue to be preserved after auto-disconnect")
 	}
 	if folder != "artist/album" {
 		t.Errorf("expected queueFolder preserved as 'artist/album', got %q", folder)
@@ -1631,6 +1631,55 @@ func TestTimeBasedDisconnect_ResetsOnSuccess(t *testing.T) {
 	}
 	if transport == nil {
 		t.Error("expected transport to survive after error recovery")
+	}
+}
+
+func TestAutoDisconnect_PreservesQueue(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	tracks := testTracks()
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StatePlaying
+	p.queue = NewQueue(tracks)
+	p.queueFolder = "artist/album"
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/test"
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	mt.mu.Lock()
+	mt.getPositionErr = fmt.Errorf("unreachable")
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	queue := p.queue
+	folder := p.queueFolder
+	transport := p.transport
+	p.mu.Unlock()
+
+	if transport != nil {
+		t.Error("expected transport nil after auto-disconnect")
+	}
+	if queue == nil {
+		t.Error("expected queue preserved after auto-disconnect")
+	}
+	if folder != "artist/album" {
+		t.Errorf("expected queueFolder preserved, got %q", folder)
 	}
 }
 

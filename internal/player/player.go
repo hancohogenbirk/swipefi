@@ -742,8 +742,6 @@ func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter)
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
-			p.queue = nil
-			p.currentStreamURL = ""
 			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
@@ -781,8 +779,6 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
-			p.queue = nil
-			p.currentStreamURL = ""
 			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
@@ -802,8 +798,6 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.stopPollingLocked()
 			p.state = StateIdle
 			p.transport = nil
-			p.queue = nil
-			p.currentStreamURL = ""
 			p.firstPollErrorAt = time.Time{}
 			p.notify()
 		}
