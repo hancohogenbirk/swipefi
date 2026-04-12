@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Track } from '../api/client';
-  import { Music, TriangleAlert } from 'lucide-svelte';
+  import { Music } from 'lucide-svelte';
 
   let {
     track,
@@ -163,8 +163,9 @@
       </div>
     {/if}
     {#if track.transcode_score && track.transcode_score > 0}
-      <div class="transcode-badge" title="{track.transcode_source || 'Unknown source'} ({Math.round(track.transcode_score * 100)}% confidence)">
-        <TriangleAlert size={16} />
+      <div class="transcode-stamp">
+        <span class="stamp-label">FAKE</span>
+        <span class="stamp-detail">{track.transcode_source || 'Lossy'} · {Math.round(track.transcode_score * 100)}%</span>
       </div>
     {/if}
   </div>
@@ -266,20 +267,41 @@
     letter-spacing: 0.05em;
   }
 
-  .transcode-badge {
+  /* Transcode stamp — same style as DELETE/KEEP swipe overlays */
+  .transcode-stamp {
     position: absolute;
-    bottom: 6px;
-    right: 6px;
-    background: rgba(255, 68, 68, 0.85);
-    color: white;
-    border-radius: 6px;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-18deg);
+    border: 4px solid #ff4444;
+    border-radius: 12px;
+    padding: 0.4rem 1.4rem;
+    background: rgba(255, 68, 68, 0.1);
     z-index: 5;
-    cursor: help;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    backdrop-filter: blur(2px);
+  }
+
+  .stamp-label {
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: #ff4444;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    line-height: 1.1;
+  }
+
+  .stamp-detail {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #ff4444;
+    letter-spacing: 0.03em;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
   }
 
   .track-info {
