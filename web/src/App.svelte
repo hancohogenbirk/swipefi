@@ -24,6 +24,7 @@
   let activeTab = $state<Tab>(savedTab || 'folders');
   let showQueue = $state(sessionStorage?.getItem(SESSION_KEY_QUEUE) === 'true');
   let showDeletedManager = $state(false);
+  let deletedBusy = $state(false);
 
   // Persist active tab, app phase, and queue visibility across refreshes
   $effect(() => {
@@ -110,6 +111,10 @@
 
     // Deleted manager sub-view: go back to settings
     if (showDeletedManager) {
+      if (deletedBusy) {
+        history.pushState({ type: 'deleted' }, '');
+        return;
+      }
       showDeletedManager = false;
       return;
     }
@@ -386,7 +391,7 @@
 
       <div class="tab-panel" class:hidden={activeTab !== 'settings'}>
         {#if showDeletedManager}
-          <DeletedManager onBack={() => showDeletedManager = false} />
+          <DeletedManager onBack={() => showDeletedManager = false} onBusyChange={(b) => deletedBusy = b} />
         {:else}
           <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} />
         {/if}
@@ -396,7 +401,7 @@
     {#if activeTab !== 'player'}
       <MiniPlayer onClick={() => activeTab = 'player'} />
     {/if}
-    <BottomNav {activeTab} onTabChange={(tab) => { activeTab = tab; showQueue = false; showDeletedManager = false; }} />
+    <BottomNav {activeTab} onTabChange={(tab) => { if (deletedBusy) return; activeTab = tab; showQueue = false; showDeletedManager = false; }} disabled={deletedBusy} />
 
     {#if showExitConfirm}
       <div class="exit-overlay" role="button" tabindex="-1" onclick={() => showExitConfirm = false} onkeydown={(e) => { if (e.key === 'Escape') showExitConfirm = false; }}>

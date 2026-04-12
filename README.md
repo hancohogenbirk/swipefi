@@ -24,6 +24,8 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - External device takeover detection (transitions to idle when another app takes over)
 - Resilient device disconnection detection (tolerates up to 10 seconds of network hiccups before disconnecting)
 - Reconnect state recovery (picks up the playing track and rebuilds the queue with original sort order on reconnect)
+- Persisted device name (Settings always shows the friendly name, never a raw UUID)
+- Navigation guard during delete/restore (blocks back button and tab changes while processing)
 - Browser back button support with in-tab navigation
 - Optimistic loading state when starting folder playback (no "No track playing" flash)
 - Auto-refresh player state when returning from background

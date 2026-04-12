@@ -39,6 +39,9 @@ func (a *API) SelectDevice(w http.ResponseWriter, r *http.Request) {
 	if err := a.store.SetConfig(store.ConfigKeyDeviceUDN, req.UDN); err != nil {
 		slog.Warn("failed to persist selected device", "err", err)
 	}
+	if err := a.store.SetConfig(store.ConfigKeyDeviceName, renderer.Name); err != nil {
+		slog.Warn("failed to persist device name", "err", err)
+	}
 
 	slog.Info("selected renderer", "name", renderer.Name, "udn", renderer.UDN)
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -51,6 +54,9 @@ func (a *API) DisconnectDevice(w http.ResponseWriter, r *http.Request) {
 	a.player.Disconnect(r.Context())
 	if err := a.store.SetConfig(store.ConfigKeyDeviceUDN, ""); err != nil {
 		slog.Warn("failed to clear device UDN config", "err", err)
+	}
+	if err := a.store.SetConfig(store.ConfigKeyDeviceName, ""); err != nil {
+		slog.Warn("failed to clear device name config", "err", err)
 	}
 	slog.Info("device disconnected")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
