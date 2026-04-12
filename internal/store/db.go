@@ -66,6 +66,10 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate audio info: %w", err)
 	}
+	if err := s.migrateTranscodeAnalysis(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate transcode analysis: %w", err)
+	}
 
 	return s, nil
 }
@@ -131,6 +135,38 @@ func (s *Store) migrateAudioInfo() error {
 
 	return nil
 }
+func (s *Store) migrateTranscodeAnalysis() error {
+	version, err := s.getSchemaVersion()
+	if err != nil {
+		return fmt.Errorf("get schema version: %w", err)
+	}
+
+	if version < 3 {
+		for _, col := range []string{
+			"ALTER TABLE tracks ADD COLUMN transcode_score REAL NOT NULL DEFAULT -1",
+			"ALTER TABLE tracks ADD COLUMN transcode_source TEXT NOT NULL DEFAULT ''",
+		} {
+			_, err := s.db.Exec(col)
+			if err != nil {
+				colName := "transcode_score"
+				if strings.Contains(col, "transcode_source") {
+					colName = "transcode_source"
+				}
+				var dummy interface{}
+				checkErr := s.db.QueryRow("SELECT " + colName + " FROM tracks LIMIT 1").Scan(&dummy)
+				if checkErr != nil && checkErr != sql.ErrNoRows {
+					return fmt.Errorf("add column %s: %w", colName, err)
+				}
+			}
+		}
+		if err := s.setSchemaVersion(3); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (s *Store) Close() error {
 	return s.db.Close()
 }

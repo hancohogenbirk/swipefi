@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Track } from '../api/client';
-  import { Music } from 'lucide-svelte';
+  import { Music, TriangleAlert } from 'lucide-svelte';
 
   let {
     track,
@@ -162,6 +162,11 @@
         <span class="no-art-label">No cover art</span>
       </div>
     {/if}
+    {#if track.transcode_score && track.transcode_score > 0.35}
+      <div class="transcode-badge" title="{track.transcode_source || 'Unknown source'} ({Math.round(track.transcode_score * 100)}% confidence)">
+        <TriangleAlert size={16} />
+      </div>
+    {/if}
   </div>
 
   <div class="track-info">
@@ -259,6 +264,22 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .transcode-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    background: rgba(255, 68, 68, 0.85);
+    color: white;
+    border-radius: 6px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    cursor: help;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   }
 
   .track-info {

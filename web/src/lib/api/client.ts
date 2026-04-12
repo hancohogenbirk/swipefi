@@ -30,6 +30,8 @@ export interface Track {
   sample_rate_hz?: number;
   bit_depth?: number;
   bitrate_kbps?: number;
+  transcode_score?: number;
+  transcode_source?: string;
 }
 
 export interface Folder {

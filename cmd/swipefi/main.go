@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"swipefi/internal/analyzer"
 	"swipefi/internal/api"
 	"swipefi/internal/dlna"
 	"swipefi/internal/library"
@@ -74,6 +75,9 @@ func run() error {
 
 	// Library scanner (music dir may be empty on first run)
 	scanner := library.NewScanner(musicDir, s)
+
+	// Transcode analyzer (gracefully disabled if flacalyzer binary not found)
+	az := analyzer.New(s)
 
 	if musicDir != "" {
 		if err := s.BackfillMusicDir(musicDir); err != nil {
@@ -151,6 +155,7 @@ func run() error {
 		scanner.SetMusicDir(newMusicDir)
 		p.SetDirs(newMusicDir, newDeleteDir)
 		os.MkdirAll(newDeleteDir, 0755)
+		az.Cancel()
 
 		// Trigger a rescan in background (music_dir scoping handles old tracks)
 		scanner.MarkScanning()
@@ -161,6 +166,10 @@ func run() error {
 				return
 			}
 			slog.Info("rescan complete", "tracks", count)
+
+			if err := az.Run(ctx, newMusicDir); err != nil {
+				slog.Error("transcode analysis after dir change", "err", err)
+			}
 		}()
 	})
 
@@ -187,6 +196,10 @@ func run() error {
 				return
 			}
 			slog.Info("initial scan done", "tracks", count)
+
+			if err := az.Run(ctx, musicDir); err != nil {
+				slog.Error("transcode analysis failed", "err", err)
+			}
 		}()
 
 		// Backfill audio format info for existing FLAC tracks that don't have it yet

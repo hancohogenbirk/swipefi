@@ -592,6 +592,158 @@ func TestUpsertTrackBatch(t *testing.T) {
 	}
 }
 
+func TestTranscodeAnalysis_DefaultScore(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	if err := s.UpsertTrack(ctx, newTrack("music/song.flac", "Song", "Artist", "Album")); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	if len(tracks) == 0 {
+		t.Fatal("expected 1 track")
+	}
+
+	// New tracks should have transcode_score = -1 (not yet analyzed)
+	if tracks[0].TranscodeScore != -1 {
+		t.Errorf("expected default transcode_score=-1, got %f", tracks[0].TranscodeScore)
+	}
+	if tracks[0].TranscodeSource != "" {
+		t.Errorf("expected empty transcode_source, got %q", tracks[0].TranscodeSource)
+	}
+}
+
+func TestUpdateTranscodeAnalysis(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	if err := s.UpsertTrack(ctx, newTrack("music/song.flac", "Song", "Artist", "Album")); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	id := tracks[0].ID
+
+	// Update transcode analysis results
+	if err := s.UpdateTranscodeAnalysis(ctx, id, 0.85, "MP3 128kbps"); err != nil {
+		t.Fatalf("UpdateTranscodeAnalysis: %v", err)
+	}
+
+	got, err := s.GetTrack(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TranscodeScore != 0.85 {
+		t.Errorf("expected transcode_score=0.85, got %f", got.TranscodeScore)
+	}
+	if got.TranscodeSource != "MP3 128kbps" {
+		t.Errorf("expected transcode_source='MP3 128kbps', got %q", got.TranscodeSource)
+	}
+}
+
+func TestListTracksNeedingAnalysis(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Insert 3 FLAC tracks and 1 MP3 track
+	flac1 := newTrack("music/a.flac", "A", "", "")
+	flac2 := newTrack("music/b.flac", "B", "", "")
+	flac3 := newTrack("music/c.flac", "C", "", "")
+	mp3 := newTrack("music/d.mp3", "D", "", "")
+	mp3.Format = "mp3"
+
+	for _, tr := range []*Track{flac1, flac2, flac3, mp3} {
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// All 3 FLACs should need analysis (score = -1)
+	needing, err := s.ListTracksNeedingAnalysis(ctx, testMusicDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(needing) != 3 {
+		t.Errorf("expected 3 tracks needing analysis, got %d", len(needing))
+	}
+
+	// Analyze one track
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	for _, tr := range tracks {
+		if tr.Path == "music/a.flac" {
+			if err := s.UpdateTranscodeAnalysis(ctx, tr.ID, 0.0, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// Now only 2 should need analysis
+	needing, err = s.ListTracksNeedingAnalysis(ctx, testMusicDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(needing) != 2 {
+		t.Errorf("expected 2 tracks needing analysis after one analyzed, got %d", len(needing))
+	}
+}
+
+func TestUpsertTrack_PreservesTranscodeAnalysis(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	track := newTrack("music/song.flac", "Song", "Artist", "Album")
+	if err := s.UpsertTrack(ctx, track); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	id := tracks[0].ID
+
+	// Set transcode analysis
+	if err := s.UpdateTranscodeAnalysis(ctx, id, 0.92, "MP3 320kbps"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-upsert the same track with different metadata
+	updated := newTrack("music/song.flac", "New Title", "New Artist", "New Album")
+	if err := s.UpsertTrack(ctx, updated); err != nil {
+		t.Fatal(err)
+	}
+
+	// Transcode analysis should be preserved
+	got, err := s.GetTrack(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TranscodeScore != 0.92 {
+		t.Errorf("expected transcode_score=0.92 preserved after upsert, got %f", got.TranscodeScore)
+	}
+	if got.TranscodeSource != "MP3 320kbps" {
+		t.Errorf("expected transcode_source preserved after upsert, got %q", got.TranscodeSource)
+	}
+	if got.Title != "New Title" {
+		t.Errorf("expected title updated, got %q", got.Title)
+	}
+}
+
+func TestTranscodeAnalysis_SchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	s, err := New(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	version, err := s.getSchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version < 3 {
+		t.Errorf("expected schema version >= 3 after migration, got %d", version)
+	}
+}
+
 func TestCleanupMissingTracks(t *testing.T) {
 	t.Run("externally removed file is purged from DB", func(t *testing.T) {
 		s := setupTestStore(t)
