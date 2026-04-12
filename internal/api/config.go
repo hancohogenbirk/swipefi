@@ -150,6 +150,10 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 		if savedUDN != "" {
 			if renderer, ok := a.discovery.GetRenderer(savedUDN); ok {
 				connectedDevice = renderer.Name
+			} else {
+				// Discovery cache might not have resolved yet — use UDN as fallback
+				// so the frontend knows a device IS connected.
+				connectedDevice = savedUDN
 			}
 		}
 	}
