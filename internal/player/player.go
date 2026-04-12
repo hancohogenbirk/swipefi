@@ -649,6 +649,70 @@ func (p *Player) Reject(ctx context.Context) error {
 	return p.playCurrentLocked(ctx)
 }
 
+// RejectFromQueue marks a track for deletion and removes it from the queue.
+// If it's the current track, behaves like Reject (skip to next or go idle).
+func (p *Player) RejectFromQueue(ctx context.Context, trackID int64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.queue == nil {
+		return fmt.Errorf("no queue")
+	}
+
+	// Find the track in the queue
+	var track *store.Track
+	for _, t := range p.queue.Tracks() {
+		if t.ID == trackID {
+			track = &t
+			break
+		}
+	}
+	if track == nil {
+		return fmt.Errorf("track not in queue")
+	}
+
+	// Move file to deleteDir (same logic as Reject)
+	srcPath := filepath.Join(p.musicDir, filepath.FromSlash(track.Path))
+	dstPath := filepath.Join(p.deleteDir, filepath.FromSlash(track.Path))
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		return fmt.Errorf("create delete dir: %w", err)
+	}
+	if err := os.Rename(srcPath, dstPath); err != nil {
+		return fmt.Errorf("move file: %w", err)
+	}
+	library.CleanupEmptyDirs(filepath.Dir(srcPath), p.musicDir)
+	slog.Info("rejected track from queue", "path", track.Path)
+
+	// Mark deleted in DB
+	if err := p.store.MarkDeleted(ctx, track.ID); err != nil {
+		slog.Warn("failed to mark track deleted in db", "track_id", track.ID, "err", err)
+	}
+
+	// Remove from queue
+	cur := p.queue.Current()
+	isCurrent := cur != nil && cur.ID == trackID
+
+	if isCurrent {
+		p.checkPlayCountLocked(ctx, true)
+		p.queue.RemoveCurrent()
+		if p.queue.Current() == nil {
+			if p.transport != nil {
+				p.transport.Stop(p.appCtx)
+			}
+			p.state = StateIdle
+			p.currentStreamURL = ""
+			p.stopPollingLocked()
+			p.notify()
+			return nil
+		}
+		return p.playCurrentLocked(ctx)
+	}
+
+	p.queue.RemoveByID(trackID)
+	p.notify()
+	return nil
+}
+
 // RemoveFromQueue removes a track from the queue by ID.
 // If it's the current track, advances to next (or goes idle if last).
 func (p *Player) RemoveFromQueue(ctx context.Context, trackID int64) error {

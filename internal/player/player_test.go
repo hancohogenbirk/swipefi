@@ -2032,6 +2032,87 @@ func TestRemoveFromQueue_NotInQueue(t *testing.T) {
 	}
 }
 
+func TestRejectFromQueue_NonCurrentTrack(t *testing.T) {
+	p, _ := setupTestPlayer(t, testTracks())
+
+	musicDir := t.TempDir()
+	deleteDir := t.TempDir()
+	p.mu.Lock()
+	p.musicDir = musicDir
+	p.deleteDir = deleteDir
+	p.state = StatePlaying
+	p.mu.Unlock()
+
+	os.MkdirAll(filepath.Join(musicDir, "artist", "album"), 0755)
+	os.WriteFile(filepath.Join(musicDir, "artist", "album", "02-song2.flac"), []byte("fake"), 0644)
+
+	err := p.RejectFromQueue(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("RejectFromQueue: %v", err)
+	}
+
+	// File moved to deleteDir
+	if _, err := os.Stat(filepath.Join(deleteDir, "artist", "album", "02-song2.flac")); os.IsNotExist(err) {
+		t.Error("expected file in deleteDir")
+	}
+
+	p.mu.Lock()
+	qLen := p.queue.Len()
+	curID := p.queue.Current().ID
+	state := p.state
+	p.mu.Unlock()
+
+	if qLen != 2 {
+		t.Errorf("want len 2, got %d", qLen)
+	}
+	if curID != 1 {
+		t.Errorf("want current 1, got %d", curID)
+	}
+	if state != StatePlaying {
+		t.Errorf("want StatePlaying, got %s", state)
+	}
+}
+
+func TestRejectFromQueue_CurrentTrack(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	mt.mu.Lock()
+	mt.checkCtx = true
+	mt.mu.Unlock()
+
+	musicDir := t.TempDir()
+	deleteDir := t.TempDir()
+	p.mu.Lock()
+	p.musicDir = musicDir
+	p.deleteDir = deleteDir
+	p.state = StatePlaying
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	os.MkdirAll(filepath.Join(musicDir, "artist", "album"), 0755)
+	os.WriteFile(filepath.Join(musicDir, "artist", "album", "01-song1.flac"), []byte("fake"), 0644)
+
+	err := p.RejectFromQueue(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RejectFromQueue: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(deleteDir, "artist", "album", "01-song1.flac")); os.IsNotExist(err) {
+		t.Error("expected file in deleteDir")
+	}
+
+	p.mu.Lock()
+	qLen := p.queue.Len()
+	curID := p.queue.Current().ID
+	p.mu.Unlock()
+
+	if qLen != 2 {
+		t.Errorf("want len 2, got %d", qLen)
+	}
+	if curID != 2 {
+		t.Errorf("want current 2, got %d", curID)
+	}
+}
+
 func TestGetQueueContext(t *testing.T) {
 	p, _ := setupTestPlayer(t, testTracks())
 
