@@ -25,6 +25,10 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Automatic device disconnection detection (returns to setup screen when device becomes unreachable)
 - Reconnect state recovery (picks up the playing track and rebuilds the queue on reconnect)
 - Browser back button support with in-tab navigation
+- Optimistic loading state when starting folder playback (no "No track playing" flash)
+- Auto-refresh player state when returning from background
+- Directional lock on swipe card (prevents wiggle during vertical scroll)
+- Instant progress bar reset on track skip (no stale position flash)
 - Loading indicator while DLNA renderer buffers a new track
 - Graceful track transitions (stops current before starting next)
 - DLNA connection retry on transient failures
