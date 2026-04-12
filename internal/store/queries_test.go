@@ -744,6 +744,88 @@ func TestTranscodeAnalysis_SchemaVersion(t *testing.T) {
 	}
 }
 
+func TestListTracks_SortByLastPlayed(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	for _, tr := range []*Track{
+		newTrack("music/a.flac", "Never Played", "", ""),
+		newTrack("music/b.flac", "Played Yesterday", "", ""),
+		newTrack("music/c.flac", "Played Today", "", ""),
+	} {
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	now := time.Now().Unix()
+	s.db.ExecContext(ctx, "UPDATE tracks SET last_played = ? WHERE id = ?", now-86400, tracks[1].ID)
+	s.db.ExecContext(ctx, "UPDATE tracks SET last_played = ? WHERE id = ?", now, tracks[2].ID)
+
+	// ASC: NULL first (never played), then oldest, then newest
+	got, err := s.ListTracks(ctx, "", "last_played", "asc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 tracks, got %d", len(got))
+	}
+	if got[0].Title != "Never Played" {
+		t.Errorf("asc[0]: want 'Never Played' (NULL), got %q", got[0].Title)
+	}
+	if got[1].Title != "Played Yesterday" {
+		t.Errorf("asc[1]: want 'Played Yesterday', got %q", got[1].Title)
+	}
+	if got[2].Title != "Played Today" {
+		t.Errorf("asc[2]: want 'Played Today', got %q", got[2].Title)
+	}
+
+	// DESC: newest first, then oldest, then NULL last
+	got, err = s.ListTracks(ctx, "", "last_played", "desc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Title != "Played Today" {
+		t.Errorf("desc[0]: want 'Played Today', got %q", got[0].Title)
+	}
+	if got[1].Title != "Played Yesterday" {
+		t.Errorf("desc[1]: want 'Played Yesterday', got %q", got[1].Title)
+	}
+	if got[2].Title != "Never Played" {
+		t.Errorf("desc[2]: want 'Never Played' (NULL), got %q", got[2].Title)
+	}
+}
+
+func TestListTracksDirectOnly_SortByLastPlayed(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	for _, tr := range []*Track{
+		newTrack("music/a.flac", "A", "", ""),
+		newTrack("music/b.flac", "B", "", ""),
+	} {
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tracks, _ := s.ListTracksDirectOnly(ctx, "music", "added_at", "asc")
+	now := time.Now().Unix()
+	s.db.ExecContext(ctx, "UPDATE tracks SET last_played = ? WHERE id = ?", now, tracks[0].ID)
+
+	got, err := s.ListTracksDirectOnly(ctx, "music", "last_played", "desc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 tracks, got %d", len(got))
+	}
+	if got[0].Title != "A" {
+		t.Errorf("expected 'A' first (most recently played), got %q", got[0].Title)
+	}
+}
+
 func TestCleanupMissingTracks(t *testing.T) {
 	t.Run("externally removed file is purged from DB", func(t *testing.T) {
 		s := setupTestStore(t)

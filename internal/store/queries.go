@@ -36,8 +36,9 @@ var ErrTrackNotFound = errors.New("track not found")
 // validSortColumns and validOrderDirs whitelist allowed ORDER BY values
 // to prevent any possibility of SQL injection via sort parameters.
 var validSortColumns = map[string]string{
-	"added_at":   "added_at",
-	"play_count": "play_count",
+	"added_at":    "added_at",
+	"play_count":  "play_count",
+	"last_played": "last_played",
 }
 
 var validOrderDirs = map[string]string{

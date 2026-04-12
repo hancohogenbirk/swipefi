@@ -70,6 +70,10 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate transcode analysis: %w", err)
 	}
+	if err := s.migrateLastPlayedIndex(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate last_played index: %w", err)
+	}
 
 	return s, nil
 }
@@ -164,6 +168,22 @@ func (s *Store) migrateTranscodeAnalysis() error {
 		}
 	}
 
+	return nil
+}
+
+func (s *Store) migrateLastPlayedIndex() error {
+	version, err := s.getSchemaVersion()
+	if err != nil {
+		return fmt.Errorf("get schema version: %w", err)
+	}
+	if version < 4 {
+		if _, err := s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tracks_last_played ON tracks(last_played)"); err != nil {
+			return fmt.Errorf("create last_played index: %w", err)
+		}
+		if err := s.setSchemaVersion(4); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+	}
 	return nil
 }
 
