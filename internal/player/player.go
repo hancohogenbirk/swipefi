@@ -300,6 +300,20 @@ func (p *Player) Disconnect() {
 	p.notify()
 }
 
+// ClearReconnecting clears the reconnecting flag and residual queue state
+// after an auto-reconnect attempt fails completely.
+func (p *Player) ClearReconnecting() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reconnecting = false
+	p.queue = nil
+	p.queueFolder = ""
+	p.queueSortBy = ""
+	p.queueSortOrder = ""
+	p.currentStreamURL = ""
+	p.notify()
+}
+
 func (p *Player) GetState() PlayerState {
 	p.mu.Lock()
 	defer p.mu.Unlock()

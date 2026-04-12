@@ -1796,6 +1796,35 @@ func TestSetTransport_ClearsReconnecting(t *testing.T) {
 	}
 }
 
+func TestClearReconnecting_ClearsState(t *testing.T) {
+	p, _ := setupTestPlayer(t, testTracks())
+
+	p.mu.Lock()
+	p.reconnecting = true
+	p.transport = nil
+	p.mu.Unlock()
+
+	var lastState PlayerState
+	p.SetOnChange(func(ps PlayerState) { lastState = ps })
+
+	p.ClearReconnecting()
+
+	p.mu.Lock()
+	reconnecting := p.reconnecting
+	queue := p.queue
+	p.mu.Unlock()
+
+	if reconnecting {
+		t.Error("expected reconnecting=false")
+	}
+	if queue != nil {
+		t.Error("expected queue cleared")
+	}
+	if lastState.Reconnecting {
+		t.Error("expected broadcast with Reconnecting=false")
+	}
+}
+
 func TestDisconnect_AlwaysCallsStop(t *testing.T) {
 	p, mt := setupTestPlayer(t, testTracks())
 
