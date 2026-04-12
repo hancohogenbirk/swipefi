@@ -13,7 +13,7 @@ RUN curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz |
     ln -s /usr/local/zig-x86_64-linux-0.15.2/zig /usr/local/bin/zig
 WORKDIR /build
 RUN git clone --depth 1 https://github.com/hancohogenbirk/flacalyzer.git .
-RUN zig build -Doptimize=ReleaseFast
+RUN zig build -Doptimize=ReleaseFast -Dcpu=x86_64
 
 # Stage 3: Build Go binary with embedded frontend
 FROM golang:1.26-alpine AS backend
