@@ -25,7 +25,9 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Resilient device disconnection detection (time-based 30-second threshold tolerates network hiccups during track changes)
 - Automatic reconnection with exponential backoff when a device becomes unreachable (preserves queue for seamless recovery)
 - Reconnect state recovery (picks up the playing track and rebuilds the queue with original sort order on reconnect)
+- Stable device connection display on refresh (no flicker)
 - Persisted device name (Settings always shows the friendly name, never a raw UUID)
+- Background delete/restore processing (survives page refresh, shows progress)
 - Navigation guard during delete/restore (blocks back button and tab changes while processing)
 - Browser back button support with in-tab navigation
 - Optimistic loading state when starting folder playback (no "No track playing" flash)
