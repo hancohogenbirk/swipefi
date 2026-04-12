@@ -22,8 +22,8 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Empty folder cleanup after permanent deletion (walks up directory tree)
 - Cached cover art cleanup on permanent delete
 - External device takeover detection (transitions to idle when another app takes over)
-- Automatic device disconnection detection (returns to setup screen when device becomes unreachable)
-- Reconnect state recovery (picks up the playing track and rebuilds the queue on reconnect)
+- Resilient device disconnection detection (tolerates up to 10 seconds of network hiccups before disconnecting)
+- Reconnect state recovery (picks up the playing track and rebuilds the queue with original sort order on reconnect)
 - Browser back button support with in-tab navigation
 - Loading indicator while DLNA renderer buffers a new track
 - Graceful track transitions (stops current before starting next)
