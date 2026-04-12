@@ -602,6 +602,71 @@ func TestRecoverRendererState_PausedTrack(t *testing.T) {
 	}
 }
 
+func TestRecoverRendererState_BuildsFolderQueue(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	// Insert 3 tracks in the same folder
+	for i, name := range []string{"01-song.flac", "02-song.flac", "03-song.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/album/" + name, Title: fmt.Sprintf("Song %d", i+1),
+			Artist: "Artist", Album: "Album", DurationMs: 180000, Format: "flac",
+			AddedAt: int64(i + 1), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	// Renderer is playing the second track in the folder
+	streamURL := fmt.Sprintf("http://%s:8080/stream/artist/album/02-song.flac", p.localIP)
+	mt.mu.Lock()
+	mt.uri = streamURL
+	mt.state = dlna.StatePlaying
+	mt.position = 30 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	queueLen := 0
+	queuePos := 0
+	var currentTitle string
+	if p.queue != nil {
+		queueLen = p.queue.Len()
+		queuePos = p.queue.Position()
+		if cur := p.queue.Current(); cur != nil {
+			currentTitle = cur.Title
+		}
+	}
+	p.mu.Unlock()
+
+	// Should have all 3 tracks in the queue, positioned at track 2 (index 1)
+	if queueLen != 3 {
+		t.Errorf("expected queue length 3, got %d", queueLen)
+	}
+	if queuePos != 1 {
+		t.Errorf("expected queue position 1 (second track), got %d", queuePos)
+	}
+	if currentTitle != "Song 2" {
+		t.Errorf("expected current track 'Song 2', got %q", currentTitle)
+	}
+}
+
 func TestRecoverRendererState_StoppedNoRecovery(t *testing.T) {
 	ctx := context.Background()
 

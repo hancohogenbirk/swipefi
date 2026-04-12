@@ -169,11 +169,32 @@ func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transp
 		return
 	}
 
+	// Build the queue from the track's parent folder so the user gets
+	// the full album/folder context, not just a single-track queue.
+	folder := filepath.Dir(trackPath)
+	folderTracks, err := p.store.ListTracks(ctx, folder, "added_at", "asc")
+	if err != nil || len(folderTracks) == 0 {
+		// Fallback: single-track queue
+		folderTracks = []store.Track{*track}
+	}
+
+	// Find the position of the current track in the folder queue
+	trackPos := 0
+	for i, t := range folderTracks {
+		if t.ID == track.ID {
+			trackPos = i
+			break
+		}
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Build a single-track queue
-	p.queue = NewQueue([]store.Track{*track})
+	p.queue = NewQueue(folderTracks)
+	// Advance the queue to the current track position
+	for i := 0; i < trackPos; i++ {
+		p.queue.Next()
+	}
 	p.currentStreamURL = pos.TrackURI
 	p.positionMs = pos.RelTime.Milliseconds()
 	p.durationMs = pos.TrackDuration.Milliseconds()
@@ -187,7 +208,8 @@ func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transp
 	}
 
 	slog.Info("recovered renderer state", "track", track.Title, "state", tState,
-		"position", pos.RelTime, "duration", pos.TrackDuration)
+		"position", pos.RelTime, "duration", pos.TrackDuration,
+		"queue_len", len(folderTracks), "queue_pos", trackPos)
 	p.notify()
 }
 
