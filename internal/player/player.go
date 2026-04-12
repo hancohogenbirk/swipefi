@@ -649,6 +649,42 @@ func (p *Player) Reject(ctx context.Context) error {
 	return p.playCurrentLocked(ctx)
 }
 
+// RemoveFromQueue removes a track from the queue by ID.
+// If it's the current track, advances to next (or goes idle if last).
+func (p *Player) RemoveFromQueue(ctx context.Context, trackID int64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.queue == nil {
+		return fmt.Errorf("no queue")
+	}
+
+	cur := p.queue.Current()
+	isCurrent := cur != nil && cur.ID == trackID
+
+	if isCurrent {
+		p.checkPlayCountLocked(ctx, true)
+		p.queue.RemoveCurrent()
+		if p.queue.Current() == nil {
+			if p.transport != nil {
+				p.transport.Stop(p.appCtx)
+			}
+			p.state = StateIdle
+			p.currentStreamURL = ""
+			p.stopPollingLocked()
+			p.notify()
+			return nil
+		}
+		return p.playCurrentLocked(ctx)
+	}
+
+	if !p.queue.RemoveByID(trackID) {
+		return fmt.Errorf("track not in queue")
+	}
+	p.notify()
+	return nil
+}
+
 // GetQueueContext returns the folder, sort column, and sort order used to create the current queue.
 func (p *Player) GetQueueContext() (folder, sortBy, sortOrder string) {
 	p.mu.Lock()

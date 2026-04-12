@@ -1946,6 +1946,92 @@ func TestPlayCurrentLocked_SetsAggressivePollUntil(t *testing.T) {
 	}
 }
 
+func TestRemoveFromQueue_NonCurrentTrack(t *testing.T) {
+	p, _ := setupTestPlayer(t, testTracks())
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.mu.Unlock()
+
+	err := p.RemoveFromQueue(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("RemoveFromQueue: %v", err)
+	}
+
+	p.mu.Lock()
+	qLen := p.queue.Len()
+	curID := p.queue.Current().ID
+	state := p.state
+	p.mu.Unlock()
+
+	if qLen != 2 {
+		t.Errorf("want len 2, got %d", qLen)
+	}
+	if curID != 1 {
+		t.Errorf("want current 1 (unchanged), got %d", curID)
+	}
+	if state != StatePlaying {
+		t.Errorf("want StatePlaying, got %s", state)
+	}
+}
+
+func TestRemoveFromQueue_CurrentTrackSkipsToNext(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	mt.mu.Lock()
+	mt.checkCtx = true
+	mt.mu.Unlock()
+
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	err := p.RemoveFromQueue(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RemoveFromQueue: %v", err)
+	}
+
+	p.mu.Lock()
+	qLen := p.queue.Len()
+	curID := p.queue.Current().ID
+	p.mu.Unlock()
+
+	if qLen != 2 {
+		t.Errorf("want len 2, got %d", qLen)
+	}
+	if curID != 2 {
+		t.Errorf("want current 2 (next), got %d", curID)
+	}
+}
+
+func TestRemoveFromQueue_LastTrackGoesIdle(t *testing.T) {
+	single := []store.Track{{ID: 1, Path: "a.flac", Title: "A"}}
+	p, _ := setupTestPlayer(t, single)
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.mu.Unlock()
+
+	err := p.RemoveFromQueue(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RemoveFromQueue: %v", err)
+	}
+
+	p.mu.Lock()
+	state := p.state
+	p.mu.Unlock()
+
+	if state != StateIdle {
+		t.Errorf("want StateIdle, got %s", state)
+	}
+}
+
+func TestRemoveFromQueue_NotInQueue(t *testing.T) {
+	p, _ := setupTestPlayer(t, testTracks())
+	err := p.RemoveFromQueue(context.Background(), 99)
+	if err == nil {
+		t.Error("expected error for non-existent track")
+	}
+}
+
 func TestGetQueueContext(t *testing.T) {
 	p, _ := setupTestPlayer(t, testTracks())
 
