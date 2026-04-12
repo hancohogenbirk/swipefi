@@ -46,6 +46,7 @@ export interface Device {
 export interface PlayerState {
   state: 'idle' | 'loading' | 'playing' | 'paused';
   connected: boolean;
+  reconnecting?: boolean;
   track?: Track;
   position_ms: number;
   duration_ms: number;
@@ -97,7 +98,9 @@ export const api = {
   // Deleted tracks
   listDeleted: () => request<Track[]>('GET', '/api/deleted'),
   restoreDeleted: (ids: number[]) =>
-    request<{ status: string; restored: number; errors?: string[] }>('POST', '/api/deleted/restore', { ids }),
+    request<{ status: string; restored?: number; errors?: string[] }>('POST', '/api/deleted/restore', { ids }),
   purgeDeleted: (ids: number[], all = false) =>
-    request<{ status: string; purged: number }>('POST', '/api/deleted/purge', all ? { all: true } : { ids }),
+    request<{ status: string; purged?: number }>('POST', '/api/deleted/purge', all ? { all: true } : { ids }),
+  deletedProcessing: () =>
+    request<{ active: boolean; operation?: string; total?: number; completed?: number; errors?: string[] }>('GET', '/api/deleted/processing'),
 };
