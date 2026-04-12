@@ -866,5 +866,10 @@ func (p *Player) pollOnce(ctx context.Context) {
 		return
 	}
 
+	// Check playcount threshold during active playback
+	if p.state == StatePlaying && !p.playCounted {
+		p.checkPlayCountLocked(p.appCtx, false)
+	}
+
 	p.notify()
 }
