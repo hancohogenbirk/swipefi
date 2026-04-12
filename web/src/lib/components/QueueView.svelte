@@ -737,6 +737,7 @@
     position: relative;
     overflow: hidden;
     border-radius: 10px;
+    flex-shrink: 0;
     transition: height 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
   }
 
