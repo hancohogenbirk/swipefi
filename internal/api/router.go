@@ -22,6 +22,7 @@ type API struct {
 	hub               *Hub
 	dataDir           string
 	onMusicDirChanged func(musicDir, deleteDir string)
+	processing        processingState
 }
 
 func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, hub *Hub, dataDir string) *API {
@@ -80,6 +81,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		r.Get("/deleted", api.ListDeleted)
 		r.Post("/deleted/restore", api.RestoreDeleted)
 		r.Post("/deleted/purge", api.PurgeDeleted)
+		r.Get("/deleted/processing", api.GetProcessingStatus)
 	})
 
 	// WebSocket
