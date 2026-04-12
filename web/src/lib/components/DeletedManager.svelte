@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { api, type Track } from '../api/client';
   import { ArrowLeft, RotateCcw, Trash2, CheckSquare, Square, CheckSquare2 } from 'lucide-svelte';
 
@@ -12,8 +13,15 @@
   let busy = $state(false);
   let error = $state('');
   let showPurgeConfirm = $state(false);
+  let processingPoll: ReturnType<typeof setInterval> | undefined;
+  let processingTotal = $state(0);
+  let processingCompleted = $state(0);
 
   let allSelected = $derived(tracks.length > 0 && selected.size === tracks.length);
+
+  onDestroy(() => {
+    if (processingPoll) clearInterval(processingPoll);
+  });
 
   async function loadDeleted() {
     loading = true;
@@ -46,19 +54,38 @@
     }
   }
 
+  async function checkProcessing() {
+    try {
+      const status = await api.deletedProcessing();
+      if (status.active) {
+        busy = true;
+        processingTotal = status.total ?? 0;
+        processingCompleted = status.completed ?? 0;
+        if (!processingPoll) {
+          processingPoll = setInterval(checkProcessing, 500);
+        }
+      } else if (processingPoll) {
+        clearInterval(processingPoll);
+        processingPoll = undefined;
+        busy = false;
+        await loadDeleted();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   async function restoreSelected() {
     if (selected.size === 0 || busy) return;
     error = '';
     busy = true;
     try {
-      const result = await api.restoreDeleted([...selected]);
-      if (result.errors?.length) {
-        error = result.errors.join('; ');
-      }
-      await loadDeleted();
+      await api.restoreDeleted([...selected]);
+      processingTotal = selected.size;
+      processingCompleted = 0;
+      processingPoll = setInterval(checkProcessing, 500);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Restore failed';
-    } finally {
       busy = false;
     }
   }
@@ -70,15 +97,17 @@
     busy = true;
     try {
       await api.purgeDeleted([...selected]);
-      await loadDeleted();
+      processingTotal = selected.size;
+      processingCompleted = 0;
+      processingPoll = setInterval(checkProcessing, 500);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Delete failed';
-    } finally {
       busy = false;
     }
   }
 
   loadDeleted();
+  checkProcessing();
 </script>
 
 <div class="deleted-manager">
@@ -125,7 +154,7 @@
       {#if busy}
         <div class="busy-overlay">
           <div class="busy-spinner"></div>
-          <span>Processing...</span>
+          <span>Processing{processingTotal > 0 ? `... (${processingCompleted}/${processingTotal})` : '...'}</span>
         </div>
       {/if}
       <div class="track-list" class:dimmed={busy}>
