@@ -489,3 +489,121 @@ func TestSetTransportStartsPolling(t *testing.T) {
 		t.Error("expected pollCancel to be nil after SetTransport(nil)")
 	}
 }
+
+func TestPollOnce_IncrementsPlayCountAfter60Seconds(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Track state changes
+	var lastState PlayerState
+	var stateMu sync.Mutex
+	p.SetOnChange(func(ps PlayerState) {
+		stateMu.Lock()
+		lastState = ps
+		stateMu.Unlock()
+	})
+
+	// Simulate: playing for 61 seconds
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second) // past grace period
+	p.playStartTime = time.Now().Add(-61 * time.Second)  // 61s of play time
+	p.accumulatedMs = 0
+	p.playCounted = false
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	initialPlayCount := p.queue.Current().PlayCount
+	p.mu.Unlock()
+
+	// Renderer reports playing
+	mt.setState(dlna.StatePlaying)
+	mt.setPosition(61*time.Second, 3*time.Minute)
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	counted := p.playCounted
+	currentTrack := p.queue.Current()
+	p.mu.Unlock()
+
+	if !counted {
+		t.Error("expected playCounted=true after 61 seconds")
+	}
+	if currentTrack.PlayCount != initialPlayCount+1 {
+		t.Errorf("expected play_count=%d, got %d", initialPlayCount+1, currentTrack.PlayCount)
+	}
+
+	// Verify notify was called (broadcast happened)
+	stateMu.Lock()
+	broadcastTrack := lastState.Track
+	stateMu.Unlock()
+
+	if broadcastTrack == nil {
+		t.Error("expected broadcast with track after playcount increment")
+	} else if broadcastTrack.PlayCount != initialPlayCount+1 {
+		t.Errorf("expected broadcast play_count=%d, got %d", initialPlayCount+1, broadcastTrack.PlayCount)
+	}
+}
+
+func TestPollOnce_DoesNotIncrementPlayCountBefore60Seconds(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Simulate: playing for only 30 seconds
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second)
+	p.playStartTime = time.Now().Add(-30 * time.Second) // only 30s
+	p.accumulatedMs = 0
+	p.playCounted = false
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	initialPlayCount := p.queue.Current().PlayCount
+	p.mu.Unlock()
+
+	mt.setState(dlna.StatePlaying)
+	mt.setPosition(30*time.Second, 3*time.Minute)
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	counted := p.playCounted
+	currentTrack := p.queue.Current()
+	p.mu.Unlock()
+
+	if counted {
+		t.Error("expected playCounted=false before 60 seconds")
+	}
+	if currentTrack.PlayCount != initialPlayCount {
+		t.Errorf("expected play_count=%d (unchanged), got %d", initialPlayCount, currentTrack.PlayCount)
+	}
+}
+
+func TestPollOnce_PlayCountOnlyIncrementsOnce(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Simulate: playing for 120 seconds
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second)
+	p.playStartTime = time.Now().Add(-120 * time.Second)
+	p.accumulatedMs = 0
+	p.playCounted = false
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	mt.setState(dlna.StatePlaying)
+	mt.setPosition(120*time.Second, 3*time.Minute)
+
+	// Poll twice
+	p.pollOnce(ctx)
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	currentTrack := p.queue.Current()
+	p.mu.Unlock()
+
+	// Should only have incremented once
+	if currentTrack.PlayCount != 1 {
+		t.Errorf("expected play_count=1 (incremented once), got %d", currentTrack.PlayCount)
+	}
+}
