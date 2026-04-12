@@ -46,6 +46,27 @@ func (q *Queue) RemoveCurrent() {
 	}
 }
 
+// RemoveByID removes a track by ID. Adjusts position if the removed track was before current.
+func (q *Queue) RemoveByID(id int64) bool {
+	idx := -1
+	for i, t := range q.tracks {
+		if t.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return false
+	}
+	q.tracks = append(q.tracks[:idx], q.tracks[idx+1:]...)
+	if idx < q.pos {
+		q.pos--
+	} else if idx == q.pos && q.pos >= len(q.tracks) && len(q.tracks) > 0 {
+		q.pos = len(q.tracks) - 1
+	}
+	return true
+}
+
 func (q *Queue) Len() int {
 	return len(q.tracks)
 }

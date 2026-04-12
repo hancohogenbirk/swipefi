@@ -315,6 +315,103 @@ func TestUpdateCurrentPlayCount(t *testing.T) {
 	}
 }
 
+func TestRemoveByID_AfterCurrent(t *testing.T) {
+	q := NewQueue(makeTracks(4))
+	q.Next() // pos=1, current=2
+
+	if !q.RemoveByID(3) {
+		t.Fatal("expected true")
+	}
+	if q.Len() != 3 {
+		t.Errorf("want len 3, got %d", q.Len())
+	}
+	if q.Position() != 1 {
+		t.Errorf("want pos 1 (unchanged), got %d", q.Position())
+	}
+	if q.Current().ID != 2 {
+		t.Errorf("want current 2, got %d", q.Current().ID)
+	}
+}
+
+func TestRemoveByID_BeforeCurrent(t *testing.T) {
+	q := NewQueue(makeTracks(4))
+	q.Next()
+	q.Next() // pos=2, current=3
+
+	if !q.RemoveByID(1) {
+		t.Fatal("expected true")
+	}
+	if q.Len() != 3 {
+		t.Errorf("want len 3, got %d", q.Len())
+	}
+	if q.Position() != 1 {
+		t.Errorf("want pos 1 (decremented), got %d", q.Position())
+	}
+	if q.Current().ID != 3 {
+		t.Errorf("want current still 3, got %d", q.Current().ID)
+	}
+}
+
+func TestRemoveByID_CurrentTrack(t *testing.T) {
+	q := NewQueue(makeTracks(3))
+	q.Next() // pos=1, current=2
+
+	if !q.RemoveByID(2) {
+		t.Fatal("expected true")
+	}
+	if q.Len() != 2 {
+		t.Errorf("want len 2, got %d", q.Len())
+	}
+	if q.Current().ID != 3 {
+		t.Errorf("want current 3 (slid in), got %d", q.Current().ID)
+	}
+}
+
+func TestRemoveByID_CurrentAtEnd(t *testing.T) {
+	q := NewQueue(makeTracks(3))
+	q.Next()
+	q.Next() // pos=2, current=3
+
+	if !q.RemoveByID(3) {
+		t.Fatal("expected true")
+	}
+	if q.Len() != 2 {
+		t.Errorf("want len 2, got %d", q.Len())
+	}
+	if q.Position() != 1 {
+		t.Errorf("want pos 1 (clamped), got %d", q.Position())
+	}
+	if q.Current().ID != 2 {
+		t.Errorf("want current 2, got %d", q.Current().ID)
+	}
+}
+
+func TestRemoveByID_NonExistent(t *testing.T) {
+	q := NewQueue(makeTracks(3))
+	q.Next()
+
+	if q.RemoveByID(99) {
+		t.Error("expected false for non-existent ID")
+	}
+	if q.Len() != 3 {
+		t.Errorf("want len unchanged, got %d", q.Len())
+	}
+}
+
+func TestRemoveByID_LastRemaining(t *testing.T) {
+	q := NewQueue(makeTracks(1))
+
+	if !q.RemoveByID(1) {
+		t.Fatal("expected true")
+	}
+	if q.Len() != 0 {
+		t.Errorf("want empty, got %d", q.Len())
+	}
+	if q.Current() != nil {
+		t.Error("want nil current")
+	}
+}
+
 func TestLenAndPosition(t *testing.T) {
 	tracks := makeTracks(4)
 	q := NewQueue(tracks)
