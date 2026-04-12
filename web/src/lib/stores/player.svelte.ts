@@ -22,6 +22,18 @@ export function updateState(newState: PlayerState) {
   state = newState;
 }
 
+let visibilityHandlerSet = false;
+
+export function setupVisibilityHandler() {
+    if (visibilityHandlerSet) return;
+    visibilityHandlerSet = true;
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            loadInitialState();
+        }
+    });
+}
+
 export function connectWebSocket() {
   if (ws?.readyState === WebSocket.OPEN) return;
 
@@ -49,6 +61,8 @@ export function connectWebSocket() {
   ws.onerror = () => {
     ws?.close();
   };
+
+  setupVisibilityHandler();
 }
 
 export function disconnectWebSocket() {
