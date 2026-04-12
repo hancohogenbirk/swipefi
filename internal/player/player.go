@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -226,7 +227,12 @@ func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transp
 func extractTrackPath(uri, localIP, port string) string {
 	prefix := fmt.Sprintf("http://%s:%s/stream/", localIP, port)
 	if strings.HasPrefix(uri, prefix) {
-		return strings.TrimPrefix(uri, prefix)
+		path := strings.TrimPrefix(uri, prefix)
+		// DLNA renderers may percent-encode the URI when reporting it back
+		if decoded, err := url.PathUnescape(path); err == nil {
+			return decoded
+		}
+		return path
 	}
 	return ""
 }
@@ -566,7 +572,7 @@ func (p *Player) Reject(ctx context.Context) error {
 
 	if p.queue.Current() == nil {
 		if p.transport != nil {
-			p.transport.Stop(ctx)
+			p.transport.Stop(p.appCtx) // Use appCtx to survive HTTP context cancellation
 		}
 		p.state = StateIdle
 		p.currentStreamURL = ""
@@ -777,17 +783,23 @@ func (p *Player) pollOnce(ctx context.Context) {
 	defer p.mu.Unlock()
 
 	p.pollErrors = 0
-	p.positionMs = pos.RelTime.Milliseconds()
-	p.durationMs = pos.TrackDuration.Milliseconds()
 
-	// Check if another source took over the device
-	if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
-		slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
-		p.state = StateIdle
-		p.currentStreamURL = ""
-		p.stopPollingLocked()
-		p.notify()
-		return
+	// Don't update position during loading — renderer may report stale data
+	// from the previous track while transitioning. Also skip the external
+	// source check since the URI may be stale during loading.
+	if p.state != StateLoading {
+		p.positionMs = pos.RelTime.Milliseconds()
+		p.durationMs = pos.TrackDuration.Milliseconds()
+
+		// Check if another source took over the device
+		if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
+			slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
+			p.state = StateIdle
+			p.currentStreamURL = ""
+			p.stopPollingLocked()
+			p.notify()
+			return
+		}
 	}
 
 	gracePeriod := 5 * time.Second
