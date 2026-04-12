@@ -1456,3 +1456,36 @@ func TestRecoverRendererState_UsesSavedFolderMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestPollOnce_TransitioningDoesNotResetGracePeriod(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Set player to StateLoading with playStartedAt 4 seconds ago
+	startedAt := time.Now().Add(-4 * time.Second)
+	p.mu.Lock()
+	p.state = StateLoading
+	p.playStartedAt = startedAt
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	// Mock renderer reporting TRANSITIONING
+	mt.setState("TRANSITIONING")
+	mt.setPosition(0, 0)
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	actualStartedAt := p.playStartedAt
+	state := p.state
+	p.mu.Unlock()
+
+	// playStartedAt should NOT have been reset
+	if !actualStartedAt.Equal(startedAt) {
+		t.Errorf("expected playStartedAt to remain unchanged, was %v, now %v", startedAt, actualStartedAt)
+	}
+	// Should still be loading
+	if state != StateLoading {
+		t.Errorf("expected StateLoading, got %s", state)
+	}
+}

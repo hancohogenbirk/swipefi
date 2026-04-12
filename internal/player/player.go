@@ -844,10 +844,9 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.notify()
 			return
 		}
-		// Extend grace period if renderer reports TRANSITIONING
+		// Renderer is transitioning — don't reset the grace period timer
 		if tState == "TRANSITIONING" {
-			slog.Debug("renderer transitioning, extending grace period")
-			p.playStartedAt = time.Now()
+			slog.Debug("renderer transitioning")
 			p.notify()
 			return
 		}
