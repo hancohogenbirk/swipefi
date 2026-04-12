@@ -265,7 +265,7 @@
   }
 
   .play-count {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: #555;
     margin: 0.5rem 0 0;
   }
