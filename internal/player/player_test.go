@@ -442,6 +442,38 @@ func TestHeartbeatResetsOnSuccess(t *testing.T) {
 	}
 }
 
+func TestPollOnce_IgnoresPositionDuringLoading(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Simulate: loading state, renderer reports stale position from previous track
+	p.mu.Lock()
+	p.state = StateLoading
+	p.playStartedAt = time.Now()
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.positionMs = 0
+	p.durationMs = 0
+	p.mu.Unlock()
+
+	// Renderer still reports old track position (stale data during transition)
+	mt.setState(dlna.StateStopped)
+	mt.setPosition(45*time.Second, 3*time.Minute)
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	posMs := p.positionMs
+	durMs := p.durationMs
+	p.mu.Unlock()
+
+	if posMs != 0 {
+		t.Errorf("expected positionMs=0 during loading, got %d", posMs)
+	}
+	if durMs != 0 {
+		t.Errorf("expected durationMs=0 during loading, got %d", durMs)
+	}
+}
+
 func TestSetTransportStartsPolling(t *testing.T) {
 	ctx := context.Background()
 

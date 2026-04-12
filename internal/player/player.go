@@ -675,17 +675,23 @@ func (p *Player) pollOnce(ctx context.Context) {
 	defer p.mu.Unlock()
 
 	p.pollErrors = 0
-	p.positionMs = pos.RelTime.Milliseconds()
-	p.durationMs = pos.TrackDuration.Milliseconds()
 
-	// Check if another source took over the device
-	if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
-		slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
-		p.state = StateIdle
-		p.currentStreamURL = ""
-		p.stopPollingLocked()
-		p.notify()
-		return
+	// Don't update position during loading — renderer may report stale data
+	// from the previous track while transitioning. Also skip the external
+	// source check since the URI may be stale during loading.
+	if p.state != StateLoading {
+		p.positionMs = pos.RelTime.Milliseconds()
+		p.durationMs = pos.TrackDuration.Milliseconds()
+
+		// Check if another source took over the device
+		if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
+			slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
+			p.state = StateIdle
+			p.currentStreamURL = ""
+			p.stopPollingLocked()
+			p.notify()
+			return
+		}
 	}
 
 	gracePeriod := 5 * time.Second
