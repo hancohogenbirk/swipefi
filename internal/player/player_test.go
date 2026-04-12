@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1680,6 +1681,118 @@ func TestAutoDisconnect_PreservesQueue(t *testing.T) {
 	}
 	if folder != "artist/album" {
 		t.Errorf("expected queueFolder preserved, got %q", folder)
+	}
+}
+
+func TestAutoDisconnect_SetsReconnecting(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	var lastState PlayerState
+	var mu sync.Mutex
+	p.SetOnChange(func(ps PlayerState) { mu.Lock(); lastState = ps; mu.Unlock() })
+
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("unreachable")
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	mu.Lock()
+	reconnecting := lastState.Reconnecting
+	connected := lastState.Connected
+	mu.Unlock()
+
+	if !reconnecting {
+		t.Error("expected Reconnecting=true after auto-disconnect")
+	}
+	if connected {
+		t.Error("expected Connected=false after auto-disconnect")
+	}
+}
+
+func TestAutoDisconnect_CallsOnDisconnect(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	var called int32
+	p.SetOnDisconnect(func() { atomic.AddInt32(&called, 1) })
+
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("unreachable")
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+	time.Sleep(50 * time.Millisecond) // callback is async
+
+	if atomic.LoadInt32(&called) == 0 {
+		t.Error("expected onDisconnect callback to fire")
+	}
+}
+
+func TestSetTransport_ClearsReconnecting(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p.mu.Lock()
+	p.reconnecting = true
+	p.mu.Unlock()
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	reconnecting := p.reconnecting
+	p.mu.Unlock()
+
+	if reconnecting {
+		t.Error("expected reconnecting=false after SetTransport")
 	}
 }
 

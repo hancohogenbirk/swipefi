@@ -36,6 +36,7 @@ const (
 type PlayerState struct {
 	State         State        `json:"state"`
 	Connected     bool         `json:"connected"`
+	Reconnecting  bool         `json:"reconnecting"`
 	Track         *store.Track `json:"track,omitempty"`
 	PositionMs    int64        `json:"position_ms"`
 	DurationMs    int64        `json:"duration_ms"`
@@ -92,6 +93,12 @@ type Player struct {
 	// Long-lived app context for background work (polling, etc.)
 	appCtx context.Context
 
+	// Reconnecting flag — set on auto-disconnect, cleared on SetTransport
+	reconnecting bool
+
+	// Callback fired on auto-disconnect (for reconnect loop)
+	onDisconnect func()
+
 	// State change callback
 	onChange StateChangeFunc
 }
@@ -120,6 +127,12 @@ func (p *Player) SetOnChange(fn StateChangeFunc) {
 	p.onChange = fn
 }
 
+func (p *Player) SetOnDisconnect(fn func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onDisconnect = fn
+}
+
 func (p *Player) SetDirs(musicDir, deleteDir string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -132,6 +145,7 @@ func (p *Player) SetTransport(t dlna.Transporter) {
 	p.transport = t
 	p.firstPollErrorAt = time.Time{}
 	if t != nil {
+		p.reconnecting = false
 		p.startPollingLocked(p.appCtx)
 		// Try to recover the renderer's current playback state
 		appCtx := p.appCtx
@@ -294,10 +308,11 @@ func (p *Player) GetState() PlayerState {
 
 func (p *Player) stateLocked() PlayerState {
 	ps := PlayerState{
-		State:      p.state,
-		Connected:  p.transport != nil,
-		PositionMs: p.positionMs,
-		DurationMs: p.durationMs,
+		State:        p.state,
+		Connected:    p.transport != nil,
+		Reconnecting: p.reconnecting,
+		PositionMs:   p.positionMs,
+		DurationMs:   p.durationMs,
 	}
 	if p.queue != nil {
 		ps.QueueLength = p.queue.Len()
@@ -743,7 +758,14 @@ func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter)
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			p.reconnecting = true
 			p.notify()
+			onDisconnect := p.onDisconnect
+			p.mu.Unlock()
+			if onDisconnect != nil {
+				go onDisconnect()
+			}
+			return
 		}
 		p.mu.Unlock()
 		return
@@ -780,7 +802,14 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			p.reconnecting = true
 			p.notify()
+			onDisconnect := p.onDisconnect
+			p.mu.Unlock()
+			if onDisconnect != nil {
+				go onDisconnect()
+			}
+			return
 		}
 		p.mu.Unlock()
 		return
@@ -799,7 +828,14 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			p.reconnecting = true
 			p.notify()
+			onDisconnect := p.onDisconnect
+			p.mu.Unlock()
+			if onDisconnect != nil {
+				go onDisconnect()
+			}
+			return
 		}
 		p.mu.Unlock()
 		return
