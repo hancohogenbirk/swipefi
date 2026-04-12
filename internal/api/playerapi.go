@@ -124,9 +124,13 @@ func (a *API) PlayerQueue(w http.ResponseWriter, r *http.Request) {
 	if tracks == nil {
 		tracks = []store.Track{}
 	}
+	folder, sortBy, sortOrder := a.player.GetQueueContext()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"tracks":   tracks,
-		"position": pos,
+		"tracks":     tracks,
+		"position":   pos,
+		"folder":     folder,
+		"sort_by":    sortBy,
+		"sort_order": sortOrder,
 	})
 }
 
@@ -156,6 +160,63 @@ func (a *API) PlayerSkipTo(w http.ResponseWriter, r *http.Request) {
 		slog.Error("skip to track", "err", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	writeJSON(w, http.StatusOK, a.player.GetState())
+}
+
+func (a *API) PlayerQueueRemove(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TrackID int64 `json:"track_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := a.player.RemoveFromQueue(r.Context(), req.TrackID); err != nil {
+		slog.Error("queue remove", "err", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, a.player.GetState())
+}
+
+func (a *API) PlayerQueueReject(w http.ResponseWriter, r *http.Request) {
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "library scan in progress, please wait")
+		return
+	}
+
+	var req struct {
+		TrackID int64 `json:"track_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Get track path for partial rescan before rejecting
+	tracks, _ := a.player.GetQueue()
+	var trackFolder string
+	for _, t := range tracks {
+		if t.ID == req.TrackID {
+			trackFolder = filepath.Dir(t.Path)
+			break
+		}
+	}
+
+	if err := a.player.RejectFromQueue(r.Context(), req.TrackID); err != nil {
+		slog.Error("queue reject", "err", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if trackFolder != "" {
+		go func() {
+			if _, err := a.scanner.ScanFolder(context.Background(), trackFolder); err != nil {
+				slog.Warn("partial rescan after queue reject failed", "folder", trackFolder, "err", err)
+			}
+		}()
 	}
 
 	writeJSON(w, http.StatusOK, a.player.GetState())
