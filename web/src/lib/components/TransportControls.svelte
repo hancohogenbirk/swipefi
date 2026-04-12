@@ -7,7 +7,7 @@
   const SKIP_MS = SKIP_SECONDS * 1000;
 
   let ps = $derived(getPlayerState());
-  let isPlaying = $derived(ps.state === 'playing');
+  let isPlaying = $derived(ps.state === 'playing' || ps.state === 'loading');
   let idle = $derived(ps.state === 'idle' && !ps.track);
 
   async function togglePlay() {
