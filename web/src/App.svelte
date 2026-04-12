@@ -47,8 +47,9 @@
   // Also re-checks the backend config endpoint before transitioning, since WebSocket
   // state can briefly show disconnected during WS reconnect cycles.
   $effect(() => {
-    const connected = playerState.connected;
-    if (initComplete && wasConnected && !connected && appPhase === 'main') {
+    const ps = getPlayerState();
+    const connected = ps.connected;
+    if (initComplete && wasConnected && !connected && !ps.reconnecting && appPhase === 'main') {
       if (!disconnectTimer) {
         disconnectTimer = setTimeout(async () => {
           // Double-check: is the device actually disconnected?
@@ -63,7 +64,8 @@
           } catch {
             // Network error — treat as disconnected
           }
-          if (!playerState.connected && appPhase === 'main') {
+          const currentPs = getPlayerState();
+          if (!currentPs.connected && appPhase === 'main') {
             appPhase = 'setup';
           }
           disconnectTimer = undefined;
@@ -154,6 +156,16 @@
       scanProgress = await api.scanStatus();
       if (scanProgress.scanning) {
         startScanPolling();
+      }
+
+      // Check if delete/restore processing is active
+      try {
+        const proc = await api.deletedProcessing();
+        if (proc.active) {
+          showDeletedManager = true;
+        }
+      } catch {
+        // ignore
       }
 
       // Discover devices
