@@ -442,6 +442,215 @@ func TestHeartbeatResetsOnSuccess(t *testing.T) {
 	}
 }
 
+func TestRecoverRendererState_PicksUpPlayingTrack(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	// Insert a track into the DB
+	if err := s.UpsertTrack(ctx, &store.Track{
+		Path: "artist/album/01-song.flac", Title: "Song 1", Artist: "Artist",
+		Album: "Album", DurationMs: 180000, Format: "flac", AddedAt: 1,
+		MusicDir: "/tmp/music",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	// Simulate renderer playing a known track
+	streamURL := fmt.Sprintf("http://%s:8080/stream/artist/album/01-song.flac", p.localIP)
+	mt.mu.Lock()
+	mt.uri = streamURL
+	mt.state = dlna.StatePlaying
+	mt.position = 45 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	// SetTransport triggers recoverRendererState
+	p.SetTransport(mt)
+
+	// Give the async recovery a moment to complete
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	state := p.state
+	track := p.queue.Current() // should be non-nil
+	posMs := p.positionMs
+	durMs := p.durationMs
+	streamURLSet := p.currentStreamURL
+	p.mu.Unlock()
+
+	if state != StatePlaying {
+		t.Errorf("expected StatePlaying, got %s", state)
+	}
+	if track == nil {
+		t.Fatal("expected a track in the queue after recovery")
+	}
+	if track.Title != "Song 1" {
+		t.Errorf("expected Song 1, got %s", track.Title)
+	}
+	if posMs != 45000 {
+		t.Errorf("expected position 45000ms, got %d", posMs)
+	}
+	if durMs != 180000 {
+		t.Errorf("expected duration 180000ms, got %d", durMs)
+	}
+	if streamURLSet != streamURL {
+		t.Errorf("expected currentStreamURL to be set, got %q", streamURLSet)
+	}
+}
+
+func TestRecoverRendererState_IgnoresUnknownTrack(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	// Renderer playing something not in our DB
+	mt.mu.Lock()
+	mt.uri = "http://someother.device/music/unknown.flac"
+	mt.state = dlna.StatePlaying
+	mt.position = 10 * time.Second
+	mt.duration = 2 * time.Minute
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	state := p.state
+	hasQueue := p.queue != nil
+	p.mu.Unlock()
+
+	// Should remain idle — can't recover an unknown track
+	if state != StateIdle {
+		t.Errorf("expected StateIdle for unknown track, got %s", state)
+	}
+	if hasQueue {
+		t.Error("expected no queue for unknown track")
+	}
+}
+
+func TestRecoverRendererState_PausedTrack(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	if err := s.UpsertTrack(ctx, &store.Track{
+		Path: "artist/album/02-song.flac", Title: "Song 2", Artist: "Artist",
+		Album: "Album", DurationMs: 240000, Format: "flac", AddedAt: 1,
+		MusicDir: "/tmp/music",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	streamURL := fmt.Sprintf("http://%s:8080/stream/artist/album/02-song.flac", p.localIP)
+	mt.mu.Lock()
+	mt.uri = streamURL
+	mt.state = dlna.StatePaused
+	mt.position = 90 * time.Second
+	mt.duration = 4 * time.Minute
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	state := p.state
+	track := p.queue.Current()
+	p.mu.Unlock()
+
+	if state != StatePaused {
+		t.Errorf("expected StatePaused, got %s", state)
+	}
+	if track == nil || track.Title != "Song 2" {
+		t.Errorf("expected Song 2, got %v", track)
+	}
+}
+
+func TestRecoverRendererState_StoppedNoRecovery(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	if err := s.UpsertTrack(ctx, &store.Track{
+		Path: "artist/album/01-song.flac", Title: "Song 1", Artist: "Artist",
+		Album: "Album", DurationMs: 180000, Format: "flac", AddedAt: 1,
+		MusicDir: "/tmp/music",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	// Renderer is STOPPED — nothing to recover
+	mt.mu.Lock()
+	mt.uri = ""
+	mt.state = dlna.StateStopped
+	mt.position = 0
+	mt.duration = 0
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	state := p.state
+	hasQueue := p.queue != nil
+	p.mu.Unlock()
+
+	if state != StateIdle {
+		t.Errorf("expected StateIdle for stopped renderer, got %s", state)
+	}
+	if hasQueue {
+		t.Error("expected no queue when renderer is stopped")
+	}
+}
+
 func TestSetTransportStartsPolling(t *testing.T) {
 	ctx := context.Background()
 

@@ -119,14 +119,86 @@ func (p *Player) SetDirs(musicDir, deleteDir string) {
 
 func (p *Player) SetTransport(t dlna.Transporter) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.transport = t
 	p.pollErrors = 0
 	if t != nil {
 		p.startPollingLocked(p.appCtx)
+		// Try to recover the renderer's current playback state
+		appCtx := p.appCtx
+		p.mu.Unlock()
+		p.recoverRendererState(appCtx, t)
 	} else {
 		p.stopPollingLocked()
+		p.mu.Unlock()
 	}
+}
+
+// recoverRendererState checks what the renderer is currently playing and
+// rebuilds the player queue to match. This is called on (re)connect so the
+// UI reflects the actual renderer state.
+func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transporter) {
+	tState, err := transport.GetState(ctx)
+	if err != nil {
+		slog.Debug("recoverRendererState: cannot get state", "err", err)
+		return
+	}
+	// Only recover if the renderer is actively playing or paused
+	if tState != dlna.StatePlaying && tState != dlna.StatePaused {
+		return
+	}
+
+	pos, err := transport.GetPosition(ctx)
+	if err != nil {
+		slog.Debug("recoverRendererState: cannot get position", "err", err)
+		return
+	}
+	if pos.TrackURI == "" {
+		return
+	}
+
+	// Extract track path from stream URL: http://<ip>:<port>/stream/<path>
+	trackPath := extractTrackPath(pos.TrackURI, p.localIP, p.port)
+	if trackPath == "" {
+		slog.Debug("recoverRendererState: cannot parse track path from URI", "uri", pos.TrackURI)
+		return
+	}
+
+	track, err := p.store.GetTrackByPath(ctx, trackPath)
+	if err != nil {
+		slog.Debug("recoverRendererState: track not found in DB", "path", trackPath, "err", err)
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Build a single-track queue
+	p.queue = NewQueue([]store.Track{*track})
+	p.currentStreamURL = pos.TrackURI
+	p.positionMs = pos.RelTime.Milliseconds()
+	p.durationMs = pos.TrackDuration.Milliseconds()
+	p.playStartedAt = time.Now().Add(-pos.RelTime) // approximate
+
+	if tState == dlna.StatePlaying {
+		p.state = StatePlaying
+		p.playStartTime = time.Now()
+	} else {
+		p.state = StatePaused
+	}
+
+	slog.Info("recovered renderer state", "track", track.Title, "state", tState,
+		"position", pos.RelTime, "duration", pos.TrackDuration)
+	p.notify()
+}
+
+// extractTrackPath extracts the relative track path from a SwipeFi stream URL.
+// Returns empty string if the URL doesn't match the expected pattern.
+func extractTrackPath(uri, localIP, port string) string {
+	prefix := fmt.Sprintf("http://%s:%s/stream/", localIP, port)
+	if strings.HasPrefix(uri, prefix) {
+		return strings.TrimPrefix(uri, prefix)
+	}
+	return ""
 }
 
 // HasTransport returns true if a DLNA transport is currently set.
