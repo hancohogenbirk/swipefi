@@ -649,6 +649,13 @@ func (p *Player) Reject(ctx context.Context) error {
 	return p.playCurrentLocked(ctx)
 }
 
+// GetQueueContext returns the folder, sort column, and sort order used to create the current queue.
+func (p *Player) GetQueueContext() (folder, sortBy, sortOrder string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.queueFolder, p.queueSortBy, p.queueSortOrder
+}
+
 // GetQueue returns the current queue tracks and position.
 func (p *Player) GetQueue() ([]store.Track, int) {
 	p.mu.Lock()

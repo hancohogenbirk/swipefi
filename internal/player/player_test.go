@@ -1945,3 +1945,24 @@ func TestPlayCurrentLocked_SetsAggressivePollUntil(t *testing.T) {
 		t.Errorf("aggressivePollUntil too late: %v, expected around %v", aggressiveUntil, expected)
 	}
 }
+
+func TestGetQueueContext(t *testing.T) {
+	p, _ := setupTestPlayer(t, testTracks())
+
+	p.mu.Lock()
+	p.queueFolder = "Jazz/Bebop"
+	p.queueSortBy = "added_at"
+	p.queueSortOrder = "desc"
+	p.mu.Unlock()
+
+	folder, sortBy, sortOrder := p.GetQueueContext()
+	if folder != "Jazz/Bebop" {
+		t.Errorf("folder: want 'Jazz/Bebop', got %q", folder)
+	}
+	if sortBy != "added_at" {
+		t.Errorf("sortBy: want 'added_at', got %q", sortBy)
+	}
+	if sortOrder != "desc" {
+		t.Errorf("sortOrder: want 'desc', got %q", sortOrder)
+	}
+}
