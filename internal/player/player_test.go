@@ -2133,3 +2133,91 @@ func TestGetQueueContext(t *testing.T) {
 		t.Errorf("sortOrder: want 'desc', got %q", sortOrder)
 	}
 }
+
+func TestPollOnce_NoNotifyDuringLoadingTransitioning(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Put player in loading state
+	p.mu.Lock()
+	p.state = StateLoading
+	p.playStartedAt = time.Now()
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	// Count notifications
+	var notifyCount int
+	var mu sync.Mutex
+	p.SetOnChange(func(ps PlayerState) {
+		mu.Lock()
+		notifyCount++
+		mu.Unlock()
+	})
+
+	// Poll with TRANSITIONING — should NOT notify
+	mt.setState("TRANSITIONING")
+	mt.setPosition(0, 0)
+	p.pollOnce(ctx)
+
+	mu.Lock()
+	count1 := notifyCount
+	mu.Unlock()
+	if count1 != 0 {
+		t.Errorf("expected 0 notifications during TRANSITIONING, got %d", count1)
+	}
+
+	// Poll while still loading (STOPPED within grace period) — should NOT notify
+	mt.setState(dlna.StateStopped)
+	p.pollOnce(ctx)
+
+	mu.Lock()
+	count2 := notifyCount
+	mu.Unlock()
+	if count2 != 0 {
+		t.Errorf("expected 0 notifications during loading/stopped, got %d", count2)
+	}
+
+	// Poll with PLAYING — SHOULD notify (state change)
+	mt.setState(dlna.StatePlaying)
+	p.pollOnce(ctx)
+
+	mu.Lock()
+	count3 := notifyCount
+	mu.Unlock()
+	if count3 != 1 {
+		t.Errorf("expected 1 notification on loading→playing transition, got %d", count3)
+	}
+}
+
+func TestPollOnce_NotifiesOnPlayingStateUpdate(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Put player in playing state (playCounted=true to avoid play count notify)
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second) // past grace period
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.playCounted = true
+	p.mu.Unlock()
+
+	var notifyCount int
+	var mu sync.Mutex
+	p.SetOnChange(func(ps PlayerState) {
+		mu.Lock()
+		notifyCount++
+		mu.Unlock()
+	})
+
+	// Normal playing poll — should still notify (for position updates)
+	mt.setState(dlna.StatePlaying)
+	mt.setPosition(5000, 180000)
+	p.pollOnce(ctx)
+
+	mu.Lock()
+	count := notifyCount
+	mu.Unlock()
+	if count != 1 {
+		t.Errorf("expected 1 notification during playing poll, got %d", count)
+	}
+}

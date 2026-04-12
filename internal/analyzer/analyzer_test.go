@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"swipefi/internal/store"
 )
@@ -168,6 +169,173 @@ sleep 30
 	err := az.Run(cancelCtx, testMusicDir)
 	if err != nil {
 		t.Errorf("expected nil on cancelled context, got %v", err)
+	}
+}
+
+func TestMarkPending_SetsRunningState(t *testing.T) {
+	s := setupTestStore(t)
+	az := &Analyzer{store: s}
+
+	st := az.GetStatus()
+	if st.Running {
+		t.Error("expected not running initially")
+	}
+
+	az.MarkPending()
+	st = az.GetStatus()
+	if !st.Running {
+		t.Error("expected running after MarkPending")
+	}
+	if st.Analyzed != 0 || st.Total != 0 {
+		t.Errorf("expected analyzed=0, total=0 after MarkPending, got %d/%d", st.Analyzed, st.Total)
+	}
+	if st.Error != "" {
+		t.Errorf("expected empty error after MarkPending, got %q", st.Error)
+	}
+}
+
+func TestCancel_ClearsRunningState(t *testing.T) {
+	s := setupTestStore(t)
+	az := &Analyzer{store: s}
+
+	az.MarkPending()
+	if !az.GetStatus().Running {
+		t.Fatal("precondition: should be running")
+	}
+
+	az.Cancel()
+	if az.GetStatus().Running {
+		t.Error("expected not running after Cancel")
+	}
+}
+
+func TestRun_ClearsRunningOnNoTracks(t *testing.T) {
+	s := setupTestStore(t)
+	mockBin := writeMockScript(t, "#!/bin/sh\nexit 1")
+	az := &Analyzer{binPath: mockBin, store: s}
+
+	// MarkPending then Run with no tracks — should clear running
+	az.MarkPending()
+	if err := az.Run(context.Background(), testMusicDir); err != nil {
+		t.Fatal(err)
+	}
+	st := az.GetStatus()
+	if st.Running {
+		t.Error("expected not running after Run with 0 tracks")
+	}
+}
+
+func TestRun_CapturesErrorOnFailure(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	tr := &store.Track{
+		Path: "music/song.flac", Title: "Song", Format: "flac",
+		AddedAt: 1000, MusicDir: testMusicDir,
+	}
+	if err := s.UpsertTrack(ctx, tr); err != nil {
+		t.Fatal(err)
+	}
+
+	// Script that prints stderr and exits with error
+	mockBin := writeMockScript(t, `#!/bin/sh
+echo "something went wrong" >&2
+exit 1
+`)
+
+	az := &Analyzer{binPath: mockBin, store: s}
+	az.Run(ctx, testMusicDir)
+
+	st := az.GetStatus()
+	if st.Running {
+		t.Error("expected not running after failed Run")
+	}
+	if st.Error == "" {
+		t.Error("expected error message after failed Run")
+	}
+	if st.Error != "something went wrong" {
+		t.Errorf("expected stderr in error, got %q", st.Error)
+	}
+}
+
+func TestRun_TracksProgress(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Insert 2 tracks
+	for _, path := range []string{"music/a.flac", "music/b.flac"} {
+		tr := &store.Track{
+			Path: path, Title: filepath.Base(path), Format: "flac",
+			AddedAt: 1000, MusicDir: testMusicDir,
+		}
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mockBin := writeMockScript(t, `#!/bin/sh
+cat <<'NDJSON'
+{"type":"file","path":"`+testMusicDir+`/music/a.flac","verdict":"lossless","confidence":0.0,"source_codec":null}
+{"type":"file","path":"`+testMusicDir+`/music/b.flac","verdict":"definitely_transcoded","confidence":0.9,"source_codec":"MP3"}
+NDJSON
+`)
+
+	az := &Analyzer{binPath: mockBin, store: s}
+	if err := az.Run(ctx, testMusicDir); err != nil {
+		t.Fatal(err)
+	}
+
+	st := az.GetStatus()
+	if st.Running {
+		t.Error("expected not running after completion")
+	}
+	if st.Total != 2 {
+		t.Errorf("expected total=2, got %d", st.Total)
+	}
+	if st.Analyzed != 2 {
+		t.Errorf("expected analyzed=2, got %d", st.Analyzed)
+	}
+	if st.Error != "" {
+		t.Errorf("expected no error, got %q", st.Error)
+	}
+}
+
+func TestCancel_StopsRunningAnalysis(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	tr := &store.Track{
+		Path: "music/song.flac", Title: "Song", Format: "flac",
+		AddedAt: 1000, MusicDir: testMusicDir,
+	}
+	if err := s.UpsertTrack(ctx, tr); err != nil {
+		t.Fatal(err)
+	}
+
+	// Script that sleeps forever
+	mockBin := writeMockScript(t, "#!/bin/sh\nsleep 60")
+	az := &Analyzer{binPath: mockBin, store: s}
+
+	done := make(chan struct{})
+	go func() {
+		az.Run(ctx, testMusicDir)
+		close(done)
+	}()
+
+	// Give Run time to start the process
+	for i := 0; i < 50; i++ {
+		if az.GetStatus().Total > 0 {
+			break
+		}
+		<-time.After(10 * time.Millisecond)
+	}
+
+	az.Cancel()
+	<-done // Run should return promptly after Cancel
+
+	st := az.GetStatus()
+	if st.Running {
+		t.Error("expected not running after Cancel")
 	}
 }
 

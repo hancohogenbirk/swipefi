@@ -226,22 +226,23 @@ test.describe.serial('Queue management', () => {
     await expect(page.locator('.now-playing')).toBeVisible();
   });
 
-  test('queue updates after skip-to', async ({ page }) => {
+  test('queue updates current highlight after skip-to', async ({ page }) => {
     await ensurePlaying(page);
     await page.locator('.queue-btn').click();
     await expect(page.locator('.queue-view')).toBeVisible();
 
-    const itemsBefore = await page.locator('[data-testid="queue-item"]').count();
+    // Get the current track ID
+    const currentBefore = await page.locator('.queue-item.current').getAttribute('data-track-id');
 
-    // Skip to the second track (removes the first)
-    const items = page.locator('[data-testid="queue-item"]');
-    const secondItem = items.nth(1);
-    await secondItem.click();
+    // Click a non-current track
+    const nonCurrent = page.locator('[data-testid="queue-item"]:not(.current)').first();
+    const targetId = await nonCurrent.getAttribute('data-track-id');
+    await nonCurrent.click();
 
-    // Wait for queue to refresh reactively (queue reloads when track changes)
+    // Wait for the current highlight to move to the clicked track
     await expect(async () => {
-      const itemsAfter = await page.locator('[data-testid="queue-item"]').count();
-      expect(itemsAfter).toBeLessThan(itemsBefore);
+      const currentAfter = await page.locator('.queue-item.current').getAttribute('data-track-id');
+      expect(currentAfter).toBe(targetId);
     }).toPass({ timeout: 5_000 });
   });
 });

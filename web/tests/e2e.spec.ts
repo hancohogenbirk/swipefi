@@ -64,8 +64,8 @@ test.describe.serial('SwipeFi E2E', () => {
     const sortSelect = page.locator('.sort-select');
     await expect(sortSelect).toBeVisible();
 
-    await sortSelect.selectOption('play_count:asc');
-    await expect(sortSelect).toHaveValue('play_count:asc');
+    await sortSelect.selectOption('play_count');
+    await expect(sortSelect).toHaveValue('play_count');
   });
 
   test('bottom navigation tabs work', async ({ page }) => {

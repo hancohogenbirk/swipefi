@@ -966,3 +966,108 @@ func TestCleanupMissingTracks(t *testing.T) {
 	})
 }
 
+func TestResetTranscodeScores(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Insert FLAC tracks and an MP3
+	flac1 := newTrack("music/a.flac", "A", "", "")
+	flac2 := newTrack("music/b.flac", "B", "", "")
+	mp3 := newTrack("music/c.mp3", "C", "", "")
+	mp3.Format = "mp3"
+
+	for _, tr := range []*Track{flac1, flac2, mp3} {
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Analyze all tracks
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	for _, tr := range tracks {
+		if err := s.UpdateTranscodeAnalysis(ctx, tr.ID, 0.85, "MP3 128kbps"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify none need analysis
+	needing, _ := s.ListTracksNeedingAnalysis(ctx, testMusicDir)
+	if len(needing) != 0 {
+		t.Fatalf("expected 0 tracks needing analysis, got %d", len(needing))
+	}
+
+	// Reset scores
+	if err := s.ResetTranscodeScores(ctx, testMusicDir); err != nil {
+		t.Fatalf("ResetTranscodeScores: %v", err)
+	}
+
+	// Only FLAC tracks should need analysis again (not MP3)
+	needing, _ = s.ListTracksNeedingAnalysis(ctx, testMusicDir)
+	if len(needing) != 2 {
+		t.Errorf("expected 2 FLAC tracks needing analysis after reset, got %d", len(needing))
+	}
+
+	// Verify MP3 score was NOT reset
+	tracks, _ = s.ListTracks(ctx, "", "added_at", "asc")
+	for _, tr := range tracks {
+		if tr.Format == "mp3" && tr.TranscodeScore != 0.85 {
+			t.Errorf("MP3 score should be unchanged, got %f", tr.TranscodeScore)
+		}
+	}
+}
+
+func TestResetTranscodeScores_FiltersByMusicDir(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Insert a track with the default music dir
+	flac := newTrack("music/a.flac", "A", "", "")
+	if err := s.UpsertTrack(ctx, flac); err != nil {
+		t.Fatal(err)
+	}
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	if err := s.UpdateTranscodeAnalysis(ctx, tracks[0].ID, 0.9, "MP3"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset with a DIFFERENT music dir — should not affect our track
+	if err := s.ResetTranscodeScores(ctx, "/other/dir"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.GetTrack(ctx, tracks[0].ID)
+	if got.TranscodeScore != 0.9 {
+		t.Errorf("score should be unchanged for different musicDir, got %f", got.TranscodeScore)
+	}
+}
+
+func TestResetTranscodeScores_SkipsDeleted(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	flac := newTrack("music/a.flac", "A", "", "")
+	if err := s.UpsertTrack(ctx, flac); err != nil {
+		t.Fatal(err)
+	}
+	tracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	id := tracks[0].ID
+
+	if err := s.UpdateTranscodeAnalysis(ctx, id, 0.9, "MP3"); err != nil {
+		t.Fatal(err)
+	}
+	// Soft-delete the track
+	if err := s.MarkDeleted(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset should not affect deleted tracks
+	if err := s.ResetTranscodeScores(ctx, testMusicDir); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.GetTrack(ctx, id)
+	if got.TranscodeScore != 0.9 {
+		t.Errorf("deleted track score should be unchanged, got %f", got.TranscodeScore)
+	}
+}
+
