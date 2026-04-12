@@ -42,17 +42,31 @@
   let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Watch for device disconnection (connected goes from true to false)
-  // Debounced: wait 2s to confirm disconnection is real, not a transient page-load race
+  // Debounced: wait 3s to confirm disconnection is real, not a transient page-load race.
+  // Also re-checks the backend config endpoint before transitioning, since WebSocket
+  // state can briefly show disconnected during WS reconnect cycles.
   $effect(() => {
     const connected = playerState.connected;
     if (initComplete && wasConnected && !connected && appPhase === 'main') {
       if (!disconnectTimer) {
-        disconnectTimer = setTimeout(() => {
+        disconnectTimer = setTimeout(async () => {
+          // Double-check: is the device actually disconnected?
+          // The WS state might have been transiently wrong.
+          try {
+            const config = await api.config();
+            if (config.connected_device) {
+              // Backend says device is still connected — ignore the blip
+              disconnectTimer = undefined;
+              return;
+            }
+          } catch {
+            // Network error — treat as disconnected
+          }
           if (!playerState.connected && appPhase === 'main') {
             appPhase = 'setup';
           }
           disconnectTimer = undefined;
-        }, 2000);
+        }, 3000);
       }
     } else if (connected && disconnectTimer) {
       clearTimeout(disconnectTimer);
@@ -157,8 +171,13 @@
       if (config.connected_device) {
         appPhase = 'main';
         // activeTab is already set from sessionStorage or defaults to 'folders'
-      } else if (devices.length > 0) {
-        appPhase = 'setup';
+      } else if (startedFromCache) {
+        // Session says we were in 'main' — trust it during page refresh.
+        // The disconnect watcher $effect will catch real disconnects
+        // after initComplete is set and move us to 'setup' if needed.
+        // This prevents double-refresh from bouncing to the connect screen
+        // due to transient page-load races.
+        appPhase = 'main';
       } else {
         appPhase = 'setup';
       }
