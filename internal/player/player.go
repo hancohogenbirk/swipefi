@@ -264,12 +264,16 @@ func (p *Player) HasTransport() bool {
 }
 
 // Disconnect stops playback and clears the transport.
-func (p *Player) Disconnect(ctx context.Context) {
+func (p *Player) Disconnect() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.transport != nil && p.state != StateIdle {
-		p.transport.Stop(ctx)
+	if p.transport != nil {
+		stopCtx, cancel := context.WithTimeout(p.appCtx, 5*time.Second)
+		defer cancel()
+		if err := p.transport.Stop(stopCtx); err != nil {
+			slog.Warn("disconnect stop failed", "err", err)
+		}
 	}
 	p.stopPollingLocked()
 	p.state = StateIdle

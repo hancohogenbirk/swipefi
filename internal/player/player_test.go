@@ -1366,7 +1366,7 @@ func TestExplicitDisconnect_ClearsQueueMetadata(t *testing.T) {
 	}
 
 	// Explicit disconnect should clear metadata
-	p.Disconnect(ctx)
+	p.Disconnect()
 
 	p.mu.Lock()
 	folder := p.queueFolder
@@ -1631,6 +1631,52 @@ func TestTimeBasedDisconnect_ResetsOnSuccess(t *testing.T) {
 	}
 	if transport == nil {
 		t.Error("expected transport to survive after error recovery")
+	}
+}
+
+func TestDisconnect_AlwaysCallsStop(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+
+	p.mu.Lock()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	mt.setState(dlna.StateStopped)
+
+	p.Disconnect()
+
+	mt.mu.Lock()
+	stops := mt.stopCalls
+	mt.mu.Unlock()
+
+	if stops < 1 {
+		t.Errorf("expected Stop called even when Idle, got %d calls", stops)
+	}
+}
+
+func TestDisconnect_HandlesStopError(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.mu.Unlock()
+
+	mt.mu.Lock()
+	mt.stopErr = fmt.Errorf("network timeout")
+	mt.mu.Unlock()
+
+	p.Disconnect()
+
+	p.mu.Lock()
+	transport := p.transport
+	state := p.state
+	p.mu.Unlock()
+
+	if transport != nil {
+		t.Error("expected transport cleared even after Stop error")
+	}
+	if state != StateIdle {
+		t.Errorf("expected StateIdle, got %s", state)
 	}
 }
 
