@@ -405,7 +405,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} onBusyChange={(b) => deletedBusy = b} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} />
+          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onStartPolling={() => startScanPolling()} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} />
         {/if}
       </div>
     </div>

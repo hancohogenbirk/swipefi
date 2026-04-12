@@ -58,6 +58,16 @@ func (a *Analyzer) GetStatus() Status {
 	return Status{Running: a.running, Analyzed: a.analyzed, Total: a.total}
 }
 
+// MarkPending sets the analyzer as running before the actual analysis starts,
+// so the frontend poll doesn't stop in the gap between scan and analysis.
+func (a *Analyzer) MarkPending() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.running = true
+	a.analyzed = 0
+	a.total = 0
+}
+
 func (a *Analyzer) Cancel() {
 	a.mu.Lock()
 	defer a.mu.Unlock()

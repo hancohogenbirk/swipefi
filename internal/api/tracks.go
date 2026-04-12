@@ -131,17 +131,23 @@ func (a *API) RescanLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mark analysis pending before goroutine starts so poll doesn't stop in the gap
+	enabled, _ := a.store.GetConfig(store.ConfigKeyFlacalyzerEnabled)
+	if enabled == "true" && a.analyzer.Available() {
+		a.analyzer.MarkPending()
+	}
+
 	a.scanner.MarkScanning()
 	go func() {
 		count, err := a.scanner.Scan(context.Background(), true)
 		if err != nil {
 			slog.Error("force rescan failed", "err", err)
+			a.analyzer.Cancel() // clear pending state on scan failure
 			return
 		}
 		slog.Info("force rescan complete", "tracks", count)
 
 		// Run flacalyzer analysis if enabled (reset scores so all tracks get re-analyzed)
-		enabled, _ := a.store.GetConfig(store.ConfigKeyFlacalyzerEnabled)
 		if enabled == "true" && a.analyzer.Available() {
 			musicDir := a.scanner.MusicDir()
 			if err := a.store.ResetTranscodeScores(context.Background(), musicDir); err != nil {

@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw, AudioLines } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0 }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, onStartPolling, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0 }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; onStartPolling?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -137,7 +137,7 @@
     error = '';
     try {
       await api.rescanLibrary();
-      onDone();
+      onStartPolling?.();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Rescan failed';
     }
