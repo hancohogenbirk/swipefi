@@ -189,6 +189,11 @@ func (a *API) SetFlacalyzerEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cancel running analysis when disabled
+	if !req.Enabled {
+		a.analyzer.Cancel()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "flacalyzer_enabled": req.Enabled})
 }
 

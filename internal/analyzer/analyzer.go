@@ -22,6 +22,7 @@ type Analyzer struct {
 	running  bool
 	analyzed int
 	total    int
+	lastErr  string
 }
 
 type flacResult struct {
@@ -47,15 +48,16 @@ func (a *Analyzer) Available() bool {
 }
 
 type Status struct {
-	Running  bool `json:"running"`
-	Analyzed int  `json:"analyzed"`
-	Total    int  `json:"total"`
+	Running  bool   `json:"running"`
+	Analyzed int    `json:"analyzed"`
+	Total    int    `json:"total"`
+	Error    string `json:"error,omitempty"`
 }
 
 func (a *Analyzer) GetStatus() Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return Status{Running: a.running, Analyzed: a.analyzed, Total: a.total}
+	return Status{Running: a.running, Analyzed: a.analyzed, Total: a.total, Error: a.lastErr}
 }
 
 // MarkPending sets the analyzer as running before the actual analysis starts,
@@ -66,28 +68,42 @@ func (a *Analyzer) MarkPending() {
 	a.running = true
 	a.analyzed = 0
 	a.total = 0
+	a.lastErr = ""
 }
 
 func (a *Analyzer) Cancel() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.running = false
 	if a.cancel != nil {
 		a.cancel()
 		a.cancel = nil
 	}
 }
 
+func (a *Analyzer) setDone(errMsg string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.running = false
+	a.lastErr = errMsg
+}
+
 func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 	if !a.Available() {
+		a.setDone("")
 		return nil
 	}
 	if musicDir == "" {
+		a.setDone("")
 		return nil
 	}
 
-	a.Cancel()
-
+	// Cancel any previous run
 	a.mu.Lock()
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	a.cancel = cancel
 	a.mu.Unlock()
@@ -96,11 +112,15 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 	tracks, err := a.store.ListTracksNeedingAnalysis(runCtx, musicDir)
 	if err != nil {
 		if runCtx.Err() != nil {
+			a.setDone("cancelled")
 			return nil
 		}
+		a.setDone(err.Error())
 		return fmt.Errorf("list tracks needing analysis: %w", err)
 	}
 	if len(tracks) == 0 {
+		slog.Info("no tracks need transcode analysis")
+		a.setDone("")
 		return nil
 	}
 
@@ -108,12 +128,8 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 	a.running = true
 	a.analyzed = 0
 	a.total = len(tracks)
+	a.lastErr = ""
 	a.mu.Unlock()
-	defer func() {
-		a.mu.Lock()
-		a.running = false
-		a.mu.Unlock()
-	}()
 
 	slog.Info("starting transcode analysis", "tracks", len(tracks))
 
@@ -124,19 +140,30 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 	}
 
 	cmd := exec.CommandContext(runCtx, a.binPath, "--format", "json", musicDir)
+	stderr, _ := cmd.StderrPipe()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		a.setDone(fmt.Sprintf("stdout pipe: %v", err))
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
+		a.setDone(fmt.Sprintf("start: %v", err))
 		return fmt.Errorf("start flacalyzer: %w", err)
 	}
+
+	// Drain stderr in background for diagnostics
+	go func() {
+		s := bufio.NewScanner(stderr)
+		for s.Scan() {
+			slog.Debug("flacalyzer stderr", "line", s.Text())
+		}
+	}()
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	var analyzed int
+	var analyzed, skipped int
 	for scanner.Scan() {
 		if runCtx.Err() != nil {
 			break
@@ -157,6 +184,10 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 			cleanPath := filepath.Clean(result.Path)
 			trackID, ok = pathToID[cleanPath]
 			if !ok {
+				skipped++
+				if skipped <= 3 {
+					slog.Debug("flacalyzer result path not in DB", "path", result.Path)
+				}
 				continue
 			}
 		}
@@ -181,10 +212,16 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 		a.mu.Unlock()
 	}
 
-	if err := cmd.Wait(); err != nil && runCtx.Err() == nil {
-		slog.Warn("flacalyzer exited with error", "err", err)
+	waitErr := cmd.Wait()
+	if waitErr != nil && runCtx.Err() == nil {
+		slog.Warn("flacalyzer exited with error", "err", waitErr)
+		a.setDone(fmt.Sprintf("flacalyzer: %v", waitErr))
+	} else if runCtx.Err() != nil {
+		a.setDone("cancelled")
+	} else {
+		a.setDone("")
 	}
 
-	slog.Info("transcode analysis complete", "analyzed", analyzed, "total", len(tracks))
+	slog.Info("transcode analysis complete", "analyzed", analyzed, "skipped", skipped, "total", len(tracks))
 	return nil
 }

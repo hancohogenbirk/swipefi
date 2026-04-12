@@ -108,6 +108,7 @@ func (a *API) ScanStatus(w http.ResponseWriter, r *http.Request) {
 		"analyzing":            azStatus.Running,
 		"analyzed":             azStatus.Analyzed,
 		"analysis_total":       azStatus.Total,
+		"analysis_error":       azStatus.Error,
 	})
 }
 

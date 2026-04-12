@@ -65,7 +65,7 @@ export const api = {
     request<Track[]>('GET', `/api/tracks?folder=${encodeURIComponent(folder)}&sort=${sort}&order=${order}&direct=true`),
   scanLibrary: () => request<{ status: string; tracks: number }>('POST', '/api/library/scan'),
   rescanLibrary: () => request<{ status: string }>('POST', '/api/library/rescan'),
-  scanStatus: () => request<{ scanning: boolean; scanned: number; total: number; phase: string; analyzing: boolean; analyzed: number; analysis_total: number }>('GET', '/api/library/scan/status'),
+  scanStatus: () => request<{ scanning: boolean; scanned: number; total: number; phase: string; analyzing: boolean; analyzed: number; analysis_total: number; analysis_error: string }>('GET', '/api/library/scan/status'),
 
   // Player
   play: (folder: string, sort: string, order: string) =>

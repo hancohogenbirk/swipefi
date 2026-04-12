@@ -85,7 +85,7 @@
   let connectingDevice = $state('');
 
   let playerState = $derived(getPlayerState());
-  let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '', analyzing: false, analyzed: 0, analysis_total: 0 });
+  let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '', analyzing: false, analyzed: 0, analysis_total: 0, analysis_error: '' });
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // --- History API for back button ---
@@ -405,7 +405,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} onBusyChange={(b) => deletedBusy = b} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onStartPolling={() => startScanPolling()} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} />
+          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onStartPolling={() => startScanPolling()} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} analysisError={scanProgress.analysis_error} />
         {/if}
       </div>
     </div>

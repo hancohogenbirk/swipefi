@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw, AudioLines } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, onStartPolling, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0 }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; onStartPolling?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, onStartPolling, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0, analysisError = '' }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; onStartPolling?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number; analysisError?: string } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -228,8 +228,12 @@
       <div class="item-content">
         <span class="item-label">Transcode Detection</span>
         <span class="item-value">
-          {#if analyzing}
+          {#if analyzing && analysisTotal > 0}
             Analyzing: {analyzed} / {analysisTotal} files
+          {:else if analyzing}
+            Starting analysis...
+          {:else if analysisError}
+            Error: {analysisError}
           {:else}
             Flag fake lossless files with flacalyzer
           {/if}
@@ -237,6 +241,10 @@
         {#if analyzing && analysisTotal > 0}
           <div class="analysis-bar">
             <div class="analysis-fill" style="width: {Math.round((analyzed / analysisTotal) * 100)}%"></div>
+          </div>
+        {:else if analyzing}
+          <div class="analysis-bar">
+            <div class="analysis-fill indeterminate"></div>
           </div>
         {/if}
       </div>
@@ -504,6 +512,16 @@
     background: var(--color-accent, #4ec484);
     border-radius: 2px;
     transition: width 0.3s ease;
+  }
+
+  .analysis-fill.indeterminate {
+    width: 30% !important;
+    animation: indeterminate 1.2s ease-in-out infinite;
+  }
+
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
   }
 
   .toggle {
