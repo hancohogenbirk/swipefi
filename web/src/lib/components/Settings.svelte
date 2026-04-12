@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw, AudioLines } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false, scanning = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean; scanning?: boolean } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0 }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -227,7 +227,18 @@
       <AudioLines size={20} />
       <div class="item-content">
         <span class="item-label">Transcode Detection</span>
-        <span class="item-value">Flag fake lossless files with flacalyzer</span>
+        <span class="item-value">
+          {#if analyzing}
+            Analyzing: {analyzed} / {analysisTotal} files
+          {:else}
+            Flag fake lossless files with flacalyzer
+          {/if}
+        </span>
+        {#if analyzing && analysisTotal > 0}
+          <div class="analysis-bar">
+            <div class="analysis-fill" style="width: {Math.round((analyzed / analysisTotal) * 100)}%"></div>
+          </div>
+        {/if}
       </div>
       <div class="toggle" class:on={flacalyzerEnabled}>
         <div class="toggle-knob"></div>
@@ -477,6 +488,22 @@
     padding: 1rem;
     color: var(--color-text-secondary);
     font-size: 0.85rem;
+  }
+
+  .analysis-bar {
+    width: 100%;
+    height: 3px;
+    background: #333;
+    border-radius: 2px;
+    margin-top: 0.3rem;
+    overflow: hidden;
+  }
+
+  .analysis-fill {
+    height: 100%;
+    background: var(--color-accent, #4ec484);
+    border-radius: 2px;
+    transition: width 0.3s ease;
   }
 
   .toggle {

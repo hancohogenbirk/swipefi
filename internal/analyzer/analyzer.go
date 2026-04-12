@@ -15,10 +15,13 @@ import (
 )
 
 type Analyzer struct {
-	binPath string
-	store   *store.Store
-	mu      sync.Mutex
-	cancel  context.CancelFunc
+	binPath  string
+	store    *store.Store
+	mu       sync.Mutex
+	cancel   context.CancelFunc
+	running  bool
+	analyzed int
+	total    int
 }
 
 type flacResult struct {
@@ -41,6 +44,18 @@ func New(s *store.Store) *Analyzer {
 
 func (a *Analyzer) Available() bool {
 	return a.binPath != ""
+}
+
+type Status struct {
+	Running  bool `json:"running"`
+	Analyzed int  `json:"analyzed"`
+	Total    int  `json:"total"`
+}
+
+func (a *Analyzer) GetStatus() Status {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return Status{Running: a.running, Analyzed: a.analyzed, Total: a.total}
 }
 
 func (a *Analyzer) Cancel() {
@@ -78,6 +93,17 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 	if len(tracks) == 0 {
 		return nil
 	}
+
+	a.mu.Lock()
+	a.running = true
+	a.analyzed = 0
+	a.total = len(tracks)
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.running = false
+		a.mu.Unlock()
+	}()
 
 	slog.Info("starting transcode analysis", "tracks", len(tracks))
 
@@ -140,6 +166,9 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 			continue
 		}
 		analyzed++
+		a.mu.Lock()
+		a.analyzed = analyzed
+		a.mu.Unlock()
 	}
 
 	if err := cmd.Wait(); err != nil && runCtx.Err() == nil {

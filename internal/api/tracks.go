@@ -98,7 +98,17 @@ func (a *API) GetTrack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) ScanStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.scanner.GetStatus())
+	scanStatus := a.scanner.GetStatus()
+	azStatus := a.analyzer.GetStatus()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"scanning":             scanStatus.Scanning,
+		"scanned":              scanStatus.Scanned,
+		"total":                scanStatus.Total,
+		"phase":                scanStatus.Phase,
+		"analyzing":            azStatus.Running,
+		"analyzed":             azStatus.Analyzed,
+		"analysis_total":       azStatus.Total,
+	})
 }
 
 func (a *API) ScanLibrary(w http.ResponseWriter, r *http.Request) {

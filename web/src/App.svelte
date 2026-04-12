@@ -85,7 +85,7 @@
   let connectingDevice = $state('');
 
   let playerState = $derived(getPlayerState());
-  let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '' });
+  let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '', analyzing: false, analyzed: 0, analysis_total: 0 });
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // --- History API for back button ---
@@ -154,7 +154,7 @@
 
       // Always check and poll scan progress
       scanProgress = await api.scanStatus();
-      if (scanProgress.scanning) {
+      if (scanProgress.scanning || scanProgress.analyzing) {
         startScanPolling();
       }
 
@@ -217,7 +217,7 @@
     try {
       const prev = scanProgress.scanning;
       scanProgress = await api.scanStatus();
-      if (!scanProgress.scanning) {
+      if (!scanProgress.scanning && !scanProgress.analyzing) {
         stopScanPolling();
         // Refresh folders when scan finishes
         if (prev) {
@@ -405,7 +405,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} onBusyChange={(b) => deletedBusy = b} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} />
+          <Settings onDone={() => { startScanPolling(); activeTab = 'folders'; }} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} />
         {/if}
       </div>
     </div>
