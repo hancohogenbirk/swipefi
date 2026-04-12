@@ -651,6 +651,68 @@ func TestRecoverRendererState_StoppedNoRecovery(t *testing.T) {
 	}
 }
 
+func TestExtractTrackPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		uri     string
+		localIP string
+		port    string
+		want    string
+	}{
+		{
+			name:    "valid stream URL",
+			uri:     "http://192.168.1.1:8080/stream/artist/album/01-song.flac",
+			localIP: "192.168.1.1",
+			port:    "8080",
+			want:    "artist/album/01-song.flac",
+		},
+		{
+			name:    "URL with spaces encoded",
+			uri:     "http://10.0.0.5:9090/stream/My%20Artist/album/song.flac",
+			localIP: "10.0.0.5",
+			port:    "9090",
+			want:    "My%20Artist/album/song.flac",
+		},
+		{
+			name:    "external URL not matching our prefix",
+			uri:     "http://other-server.local/music/song.mp3",
+			localIP: "192.168.1.1",
+			port:    "8080",
+			want:    "",
+		},
+		{
+			name:    "empty URI",
+			uri:     "",
+			localIP: "192.168.1.1",
+			port:    "8080",
+			want:    "",
+		},
+		{
+			name:    "wrong port",
+			uri:     "http://192.168.1.1:9999/stream/artist/song.flac",
+			localIP: "192.168.1.1",
+			port:    "8080",
+			want:    "",
+		},
+		{
+			name:    "wrong IP",
+			uri:     "http://10.0.0.1:8080/stream/artist/song.flac",
+			localIP: "192.168.1.1",
+			port:    "8080",
+			want:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTrackPath(tt.uri, tt.localIP, tt.port)
+			if got != tt.want {
+				t.Errorf("extractTrackPath(%q) = %q, want %q", tt.uri, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSetTransportStartsPolling(t *testing.T) {
 	ctx := context.Background()
 
