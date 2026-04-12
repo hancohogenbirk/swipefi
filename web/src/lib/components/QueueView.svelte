@@ -3,7 +3,7 @@
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { getSort } from '../stores/library.svelte';
-  import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical } from 'lucide-svelte';
+  import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical, Clock } from 'lucide-svelte';
 
   const HAPTIC_DURATION_MS = 30;
   const MOUSE_DRAG_THRESHOLD_PX = 3;
@@ -383,7 +383,7 @@
                 <span class="pcount zero">—</span>
               {/if}
             {:else}
-              <span class="date-val">{formatDate(track.added_at)}</span>
+              <span class="date-val"><Clock size={12} /> {formatDate(track.added_at)}</span>
             {/if}
           </div>
 
@@ -638,8 +638,13 @@
   }
 
   .date-val {
-    color: #888;
+    color: var(--color-accent, #4ec484);
+    font-weight: 600;
+    letter-spacing: 0.02em;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
   }
 
   .loading, .empty {
