@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,8 +24,9 @@ type mockTransport struct {
 	playCalls   int
 	stopCalls   int
 	setURICalls int
-	playErr     error
-	getStateErr error
+	playErr        error
+	getStateErr    error
+	getPositionErr error
 	// When true, SetURI/Play/Stop check ctx.Err() first and return it if
 	// non-nil. This catches bugs where a cancelled context is passed.
 	checkCtx bool
@@ -99,6 +101,9 @@ func (m *mockTransport) GetState(_ context.Context) (dlna.TransportState, error)
 func (m *mockTransport) GetPosition(_ context.Context) (*dlna.PositionInfo, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.getPositionErr != nil {
+		return nil, m.getPositionErr
+	}
 	return &dlna.PositionInfo{
 		TrackDuration: m.duration,
 		RelTime:       m.position,
@@ -1191,5 +1196,263 @@ func TestPollOnce_PlayCountOnlyIncrementsOnce(t *testing.T) {
 	// Should only have incremented once
 	if currentTrack.PlayCount != 1 {
 		t.Errorf("expected play_count=1 (incremented once), got %d", currentTrack.PlayCount)
+	}
+}
+
+func TestPlayFolder_StoresQueueMetadata(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	for i, name := range []string{"01-song.flac", "02-song.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/album/" + name, Title: fmt.Sprintf("Song %d", i+1),
+			Artist: "Artist", Album: "Album", DurationMs: 180000, Format: "flac",
+			AddedAt: int64(i + 1), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	// Stop polling so it doesn't interfere
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.mu.Unlock()
+
+	if err := p.PlayFolder(ctx, "artist/album", "title", "desc"); err != nil {
+		t.Fatalf("PlayFolder: %v", err)
+	}
+
+	p.mu.Lock()
+	folder := p.queueFolder
+	sortBy := p.queueSortBy
+	sortOrder := p.queueSortOrder
+	p.mu.Unlock()
+
+	if folder != "artist/album" {
+		t.Errorf("expected queueFolder='artist/album', got %q", folder)
+	}
+	if sortBy != "title" {
+		t.Errorf("expected queueSortBy='title', got %q", sortBy)
+	}
+	if sortOrder != "desc" {
+		t.Errorf("expected queueSortOrder='desc', got %q", sortOrder)
+	}
+}
+
+func TestPollDisconnect_PreservesQueueMetadata(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	// Set up queue metadata and a playing state
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StatePlaying
+	p.queue = NewQueue(testTracks())
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.queueFolder = "artist/album"
+	p.queueSortBy = "title"
+	p.queueSortOrder = "desc"
+	p.mu.Unlock()
+
+	// Make GetPosition fail to trigger disconnect via poll errors
+	mt.mu.Lock()
+	mt.getPositionErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Poll maxPollErrors times to trigger disconnect
+	for i := 0; i < 10; i++ {
+		p.pollOnce(ctx)
+	}
+
+	p.mu.Lock()
+	transport := p.transport
+	queue := p.queue
+	folder := p.queueFolder
+	sortBy := p.queueSortBy
+	sortOrder := p.queueSortOrder
+	p.mu.Unlock()
+
+	if transport != nil {
+		t.Error("expected transport to be nil after disconnect")
+	}
+	if queue != nil {
+		t.Error("expected queue to be nil after disconnect")
+	}
+	if folder != "artist/album" {
+		t.Errorf("expected queueFolder preserved as 'artist/album', got %q", folder)
+	}
+	if sortBy != "title" {
+		t.Errorf("expected queueSortBy preserved as 'title', got %q", sortBy)
+	}
+	if sortOrder != "desc" {
+		t.Errorf("expected queueSortOrder preserved as 'desc', got %q", sortOrder)
+	}
+}
+
+func TestExplicitDisconnect_ClearsQueueMetadata(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	for i, name := range []string{"01-song.flac", "02-song.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/album/" + name, Title: fmt.Sprintf("Song %d", i+1),
+			Artist: "Artist", Album: "Album", DurationMs: 180000, Format: "flac",
+			AddedAt: int64(i + 1), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.mu.Unlock()
+
+	if err := p.PlayFolder(ctx, "artist/album", "title", "desc"); err != nil {
+		t.Fatalf("PlayFolder: %v", err)
+	}
+
+	// Explicit disconnect should clear metadata
+	p.Disconnect(ctx)
+
+	p.mu.Lock()
+	folder := p.queueFolder
+	sortBy := p.queueSortBy
+	sortOrder := p.queueSortOrder
+	p.mu.Unlock()
+
+	if folder != "" {
+		t.Errorf("expected queueFolder cleared, got %q", folder)
+	}
+	if sortBy != "" {
+		t.Errorf("expected queueSortBy cleared, got %q", sortBy)
+	}
+	if sortOrder != "" {
+		t.Errorf("expected queueSortOrder cleared, got %q", sortOrder)
+	}
+}
+
+func TestRecoverRendererState_UsesSavedFolderMetadata(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	// Insert 3 tracks in "artist/album"
+	for i, name := range []string{"01-song.flac", "02-song.flac", "03-song.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/album/" + name, Title: fmt.Sprintf("Album Song %d", i+1),
+			Artist: "Artist", Album: "Album", DurationMs: 180000, Format: "flac",
+			AddedAt: int64(i + 1), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Insert 2 tracks in "artist/singles"
+	for i, name := range []string{"single-a.flac", "single-b.flac"} {
+		if err := s.UpsertTrack(ctx, &store.Track{
+			Path: "artist/singles/" + name, Title: fmt.Sprintf("Single %d", i+1),
+			Artist: "Artist", Album: "Singles", DurationMs: 120000, Format: "flac",
+			AddedAt: int64(i + 10), MusicDir: "/tmp/music",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	// Pre-set saved queue metadata pointing to "artist/album" with custom sort
+	p.mu.Lock()
+	p.queueFolder = "artist/album"
+	p.queueSortBy = "title"
+	p.queueSortOrder = "desc"
+	p.mu.Unlock()
+
+	mt := newMockTransport()
+	// Renderer is playing a track from "artist/album"
+	streamURL := fmt.Sprintf("http://%s:8080/stream/artist/album/02-song.flac", p.localIP)
+	mt.mu.Lock()
+	mt.uri = streamURL
+	mt.state = dlna.StatePlaying
+	mt.position = 30 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	queueLen := 0
+	var titles []string
+	if p.queue != nil {
+		queueLen = p.queue.Len()
+		for _, t := range p.queue.Tracks() {
+			titles = append(titles, t.Title)
+		}
+	}
+	p.mu.Unlock()
+
+	// Should have 3 tracks from "artist/album" (not 2 from "artist/singles")
+	if queueLen != 3 {
+		t.Errorf("expected queue length 3, got %d", queueLen)
+	}
+
+	// Verify all tracks are from the album folder
+	for _, title := range titles {
+		if !strings.HasPrefix(title, "Album Song") {
+			t.Errorf("expected all tracks from 'artist/album', got title %q", title)
+		}
 	}
 }

@@ -78,6 +78,11 @@ type Player struct {
 	// Consecutive poll errors — disconnect after maxPollErrors
 	pollErrors int
 
+	// Queue metadata for recovery after disconnect
+	queueFolder    string
+	queueSortBy    string
+	queueSortOrder string
+
 	// Polling
 	pollCancel context.CancelFunc
 
@@ -142,6 +147,9 @@ func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transp
 	// Don't clobber an existing queue — only recover when idle
 	p.mu.Lock()
 	hasQueue := p.queue != nil
+	savedFolder := p.queueFolder
+	savedSortBy := p.queueSortBy
+	savedSortOrder := p.queueSortOrder
 	p.mu.Unlock()
 	if hasQueue {
 		return
@@ -179,10 +187,17 @@ func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transp
 		return
 	}
 
-	// Build the queue from the track's parent folder so the user gets
-	// the full album/folder context, not just a single-track queue.
-	folder := filepath.Dir(trackPath)
-	folderTracks, err := p.store.ListTracks(ctx, folder, "added_at", "asc")
+	// Build the queue from the saved folder metadata if available,
+	// otherwise fall back to the track's parent folder.
+	folder := savedFolder
+	sortBy := savedSortBy
+	sortOrder := savedSortOrder
+	if folder == "" {
+		folder = filepath.Dir(trackPath)
+		sortBy = "added_at"
+		sortOrder = "asc"
+	}
+	folderTracks, err := p.store.ListTracks(ctx, folder, sortBy, sortOrder)
 	if err != nil || len(folderTracks) == 0 {
 		// Fallback: single-track queue
 		folderTracks = []store.Track{*track}
@@ -258,6 +273,9 @@ func (p *Player) Disconnect(ctx context.Context) {
 	p.transport = nil
 	p.queue = nil
 	p.currentStreamURL = ""
+	p.queueFolder = ""
+	p.queueSortBy = ""
+	p.queueSortOrder = ""
 	p.notify()
 }
 
@@ -308,6 +326,9 @@ func (p *Player) PlayFolder(ctx context.Context, folder, sortBy, order string) e
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.queueFolder = folder
+	p.queueSortBy = sortBy
+	p.queueSortOrder = order
 	p.queue = NewQueue(tracks)
 	return p.playCurrentLocked(ctx)
 }
