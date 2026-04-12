@@ -3,7 +3,7 @@
   import { api, type Folder, type Track } from '../api/client';
   import { getSort, getOrder, setSort, setOrder } from '../stores/library.svelte';
   import { getPlayerState, updateState } from '../stores/player.svelte';
-  import { Folder as FolderIcon, ArrowUp, Play, Music } from 'lucide-svelte';
+  import { Folder as FolderIcon, ArrowUp, ArrowDown, Play, Music } from 'lucide-svelte';
 
   let { onNavigateToPlayer, onFolderNavigate, goBackSignal = 0, refreshSignal = 0 }: {
     onNavigateToPlayer: () => void;
@@ -130,11 +130,16 @@
     onFolderNavigate?.(path);
   }
 
-  function handleSortChange(e: Event) {
+  function handleSortTypeChange(e: Event) {
     const val = (e.target as HTMLSelectElement).value;
-    const [sort, order] = val.split(':');
-    setSort(sort);
-    setOrder(order);
+    setSort(val);
+    loadFolders(currentPath);
+  }
+
+  function toggleOrder() {
+    const newOrder = getOrder() === 'asc' ? 'desc' : 'asc';
+    setOrder(newOrder);
+    loadFolders(currentPath);
   }
 
   // React to back signal from App (browser back button)
@@ -192,12 +197,18 @@
       {/if}
     </div>
     <div class="header-actions">
-      <select class="sort-select" onchange={handleSortChange} value={`${getSort()}:${getOrder()}`}>
-        <option value="added_at:desc">Newest first</option>
-        <option value="added_at:asc">Oldest first</option>
-        <option value="play_count:asc">Least played</option>
-        <option value="play_count:desc">Most played</option>
+      <select class="sort-select" onchange={handleSortTypeChange} value={getSort()}>
+        <option value="added_at">Date added</option>
+        <option value="play_count">Play count</option>
+        <option value="last_played">Last played</option>
       </select>
+      <button class="order-toggle" onclick={toggleOrder} title={getOrder() === 'asc' ? 'Ascending' : 'Descending'}>
+        {#if getOrder() === 'asc'}
+          <ArrowUp size={18} />
+        {:else}
+          <ArrowDown size={18} />
+        {/if}
+      </button>
     </div>
   </header>
 
@@ -329,6 +340,23 @@
     border-radius: 8px;
     padding: 0.5rem;
     font-size: 0.85rem;
+  }
+
+  .order-toggle {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .order-toggle:hover {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .play-all-btn {

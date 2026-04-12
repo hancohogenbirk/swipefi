@@ -19,7 +19,7 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Audio format info on the now-playing card (sample rate, bit depth, bitrate) for FLAC files
 - Transcode detection — background analysis flags FLAC files that were transcoded from lossy sources (powered by [flacalyzer](https://github.com/hancohogenbirk/flacalyzer), warning badge on album art)
 - Spotify-style full-width progress bar with elapsed/remaining times below
-- Sort by play count or date added
+- Sort by date added, play count, or last played with ascending/descending toggle
 - Cover art display (embedded, MusicBrainz/Cover Art Archive fallback)
 - Deletion management — restore or permanently delete rejected files from Settings
 - Empty folder cleanup after permanent deletion (walks up directory tree)
