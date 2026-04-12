@@ -22,7 +22,8 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Empty folder cleanup after permanent deletion (walks up directory tree)
 - Cached cover art cleanup on permanent delete
 - External device takeover detection (transitions to idle when another app takes over)
-- Resilient device disconnection detection (tolerates up to 10 seconds of network hiccups before disconnecting)
+- Resilient device disconnection detection (time-based 30-second threshold tolerates network hiccups during track changes)
+- Automatic reconnection with exponential backoff when a device becomes unreachable (preserves queue for seamless recovery)
 - Reconnect state recovery (picks up the playing track and rebuilds the queue with original sort order on reconnect)
 - Persisted device name (Settings always shows the friendly name, never a raw UUID)
 - Navigation guard during delete/restore (blocks back button and tab changes while processing)
