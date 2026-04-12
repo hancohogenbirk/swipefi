@@ -440,6 +440,15 @@ func (s *Store) UpdateTranscodeAnalysis(ctx context.Context, id int64, score flo
 	return nil
 }
 
+// ResetTranscodeScores resets all transcode scores to -1 so they get re-analyzed.
+func (s *Store) ResetTranscodeScores(ctx context.Context, musicDir string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE tracks SET transcode_score = -1, transcode_source = ''
+		WHERE format = 'flac' AND deleted = 0 AND music_dir = ?
+	`, musicDir)
+	return err
+}
+
 // ListTracksNeedingAnalysis returns FLAC tracks that haven't been analyzed for transcoding.
 func (s *Store) ListTracksNeedingAnalysis(ctx context.Context, musicDir string) ([]Track, error) {
 	rows, err := s.db.QueryContext(ctx, `

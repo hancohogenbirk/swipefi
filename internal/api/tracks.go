@@ -140,10 +140,13 @@ func (a *API) RescanLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("force rescan complete", "tracks", count)
 
-		// Run flacalyzer analysis if enabled
+		// Run flacalyzer analysis if enabled (reset scores so all tracks get re-analyzed)
 		enabled, _ := a.store.GetConfig(store.ConfigKeyFlacalyzerEnabled)
 		if enabled == "true" && a.analyzer.Available() {
 			musicDir := a.scanner.MusicDir()
+			if err := a.store.ResetTranscodeScores(context.Background(), musicDir); err != nil {
+				slog.Error("reset transcode scores", "err", err)
+			}
 			if err := a.analyzer.Run(context.Background(), musicDir); err != nil {
 				slog.Error("transcode analysis after rescan", "err", err)
 			}
