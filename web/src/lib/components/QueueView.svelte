@@ -60,7 +60,9 @@
   const SWIPE_LOCK_THRESHOLD = 10;
 
   async function loadQueue() {
-    loading = true;
+    // Only show loading spinner on initial load (no tracks yet)
+    const isInitial = tracks.length === 0;
+    if (isInitial) loading = true;
     try {
       const q = await api.queue();
       tracks = q.tracks ?? [];
@@ -168,13 +170,15 @@
     if (distFromTop < edgeZone) {
       const speed = Math.round(2 + (1 - distFromTop / edgeZone) * 10);
       autoScrollTimer = setInterval(() => {
-        listEl?.scrollBy(0, -speed);
+        if (!listEl || listEl.scrollTop <= 0) { stopAutoScroll(); return; }
+        listEl.scrollBy(0, -speed);
         updateScrollOffset();
       }, 16);
     } else if (distFromBottom < edgeZone) {
       const speed = Math.round(2 + (1 - distFromBottom / edgeZone) * 10);
       autoScrollTimer = setInterval(() => {
-        listEl?.scrollBy(0, speed);
+        if (!listEl || listEl.scrollTop >= listEl.scrollHeight - listEl.clientHeight) { stopAutoScroll(); return; }
+        listEl.scrollBy(0, speed);
         updateScrollOffset();
       }, 16);
     }
@@ -300,26 +304,36 @@
     stopAutoScroll();
   });
 
-  /** Compute inline style for an item during drag */
-  function getItemStyle(idx: number): string {
+  /** Compute inline style for the swipe-container during drag reorder */
+  function getDragStyle(idx: number): string {
     if (!isDragging || dragOriginalIndex === null || targetIndex === null) return '';
 
     if (idx === dragOriginalIndex) {
-      // Dragged item follows the finger — compensate for container scroll
-      return `transform: translateY(${dragDeltaY + dragScrollOffset}px); z-index: 10;`;
+      // Clamp so the dragged item can't go past the first or last position
+      const minY = -dragOriginalIndex * itemHeight;
+      const maxY = (tracks.length - 1 - dragOriginalIndex) * itemHeight;
+      const rawY = dragDeltaY + dragScrollOffset;
+      const clampedY = Math.max(minY, Math.min(maxY, rawY));
+      return `transform: translateY(${clampedY}px); z-index: 10;`;
     }
 
-    // Shift other items to create a visual gap at the drop target
     if (dragOriginalIndex < targetIndex) {
-      // Dragging down: items between original+1 and target shift up
       if (idx > dragOriginalIndex && idx <= targetIndex) {
         return `transform: translateY(${-itemHeight}px);`;
       }
     } else if (dragOriginalIndex > targetIndex) {
-      // Dragging up: items between target and original-1 shift down
       if (idx >= targetIndex && idx < dragOriginalIndex) {
         return `transform: translateY(${itemHeight}px);`;
       }
+    }
+    return '';
+  }
+
+  /** Compute inline style for the queue-item during swipe */
+  function getSwipeStyle(idx: number): string {
+    if (swipeIdx === idx && (swipeDragging || swipeSwiping)) {
+      const x = swipeSwiping ? (swipeDirection === 'left' ? -500 : 500) : swipeDeltaX;
+      return `transform: translateX(${x}px);`;
     }
     return '';
   }
@@ -436,14 +450,9 @@
     // Animate slide off screen
     await new Promise(r => setTimeout(r, 300));
 
-    // Start collapse animation
-    swipeSwiping = false;
-    swipeDirection = null;
+    // Collapse the container (keep swipeSwiping true to block interactions)
     collapsingId = track.id;
-
-    // Wait for collapse animation
     await new Promise(r => setTimeout(r, 200));
-    collapsingId = null;
 
     // Perform the action
     try {
@@ -458,8 +467,11 @@
       console.error('[swipefi] queue swipe action failed:', e);
     }
 
-    // Reload queue
+    // Reload queue, then reset all state
     await loadQueue();
+    collapsingId = null;
+    swipeSwiping = false;
+    swipeDirection = null;
     resetSwipeState();
   }
 
@@ -504,25 +516,30 @@
         <div
           class="swipe-container"
           class:collapsing={collapsingId === track.id}
+          class:dragging={isDragging && dragOriginalIndex === idx}
+          style={getDragStyle(idx)}
         >
-          <!-- Reveal backgrounds -->
-          <div class="swipe-bg swipe-bg-left">
-            <Trash2 size={18} />
-          </div>
-          <div class="swipe-bg swipe-bg-right">
-            <X size={18} />
-          </div>
+          <!-- Reveal backgrounds: left bg shows when swiping left (reject), right bg when swiping right (remove) -->
+          {#if swipeIdx === idx && swipeDeltaX < 0}
+            <div class="swipe-bg swipe-bg-left">
+              <Trash2 size={18} />
+            </div>
+          {/if}
+          {#if swipeIdx === idx && swipeDeltaX > 0}
+            <div class="swipe-bg swipe-bg-right">
+              <X size={18} />
+            </div>
+          {/if}
 
           <div
             class="queue-item"
             class:current={track.id === currentTrackId}
-            class:dragging={isDragging && dragOriginalIndex === idx}
             class:swiping-out={swipeSwiping && swipeIdx === idx}
             data-testid="queue-item"
             data-track-id={track.id}
             role="button"
             tabindex="0"
-            style="{getItemStyle(idx)}{swipeIdx === idx && (swipeDragging || swipeSwiping) ? `transform: translateX(${swipeSwiping ? (swipeDirection === 'left' ? -500 : 500) : swipeDeltaX}px);` : ''}"
+            style={getSwipeStyle(idx)}
             onclick={() => { if (!swipeDragging && !swipeSwiping) skipTo(track.id); }}
             onkeydown={(e) => { if (e.key === 'Enter' && !swipeDragging) skipTo(track.id); }}
             ontouchstart={(e) => handleSwipeTouchStart(e, idx)}
@@ -670,6 +687,7 @@
   }
 
   .queue-item {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -681,14 +699,14 @@
     user-select: none;
   }
 
-  /* During active drag: non-dragged items animate transforms smoothly */
-  .queue-list.dragging-active .queue-item:not(.dragging) {
-    transition: transform 0.15s ease, background 0.15s, box-shadow 0.15s;
+  /* During active drag: non-dragged containers animate transforms smoothly */
+  .queue-list.dragging-active .swipe-container:not(.dragging) {
+    transition: transform 0.15s ease;
   }
 
-  /* Dragged item: no transform transition, follows finger directly */
-  .queue-list.dragging-active .queue-item.dragging {
-    transition: background 0.15s, box-shadow 0.15s;
+  /* Dragged container: no transform transition, follows finger directly */
+  .queue-list.dragging-active .swipe-container.dragging {
+    transition: none;
   }
 
   .queue-item:hover {
@@ -704,10 +722,9 @@
     border-left: 3px solid var(--color-accent);
   }
 
-  .queue-item.dragging {
+  .swipe-container.dragging .queue-item {
     background: #2a2a2a;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    z-index: 10;
     border-radius: 12px;
     touch-action: none;
   }
@@ -742,6 +759,7 @@
     font-weight: 600;
     font-size: 0.85rem;
     gap: 0.5rem;
+    pointer-events: none;
   }
 
   .swipe-bg-left {
@@ -818,7 +836,7 @@
     color: var(--color-text);
   }
 
-  .queue-item.dragging .drag-handle {
+  .swipe-container.dragging .drag-handle {
     cursor: grabbing;
   }
 
