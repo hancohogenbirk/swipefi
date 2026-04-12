@@ -366,8 +366,8 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 	mt.getStateErr = fmt.Errorf("connection refused")
 	mt.mu.Unlock()
 
-	// Poll 3 times — should trigger disconnect after 3 consecutive errors
-	for i := 0; i < 3; i++ {
+	// Poll 10 times — should trigger disconnect after maxPollErrors consecutive errors
+	for i := 0; i < 10; i++ {
 		p.pollOnce(ctx)
 	}
 
@@ -377,7 +377,7 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 	p.mu.Unlock()
 
 	if transport != nil {
-		t.Error("expected transport to be nil after 3 heartbeat failures")
+		t.Error("expected transport to be nil after 10 heartbeat failures")
 	}
 	if state != StateIdle {
 		t.Errorf("expected StateIdle, got %s", state)
@@ -389,6 +389,52 @@ func TestHeartbeatDetectsDisconnect(t *testing.T) {
 
 	if connected {
 		t.Error("expected last broadcast to have connected=false")
+	}
+}
+
+func TestHeartbeatDoesNotDisconnect_Before10Errors(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	p.stopPollingLocked()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	// Make GetState fail
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Poll 9 times — should NOT trigger disconnect
+	for i := 0; i < 9; i++ {
+		p.pollOnce(ctx)
+	}
+
+	p.mu.Lock()
+	transport := p.transport
+	state := p.state
+	p.mu.Unlock()
+
+	if transport == nil {
+		t.Error("expected transport to still be set after 9 heartbeat failures")
+	}
+	if state != StateIdle {
+		t.Errorf("expected StateIdle, got %s", state)
 	}
 }
 

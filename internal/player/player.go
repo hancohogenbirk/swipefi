@@ -29,6 +29,7 @@ const (
 const (
 	playCountThresholdMs = 60_000
 	dlnaRetryDelay       = 500 * time.Millisecond
+	maxPollErrors        = 10
 )
 
 // PlayerState is the full state broadcast to WebSocket clients.
@@ -74,7 +75,7 @@ type Player struct {
 	positionMs int64
 	durationMs int64
 
-	// Consecutive poll errors — disconnect after 3
+	// Consecutive poll errors — disconnect after maxPollErrors
 	pollErrors int
 
 	// Polling
@@ -707,7 +708,10 @@ func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter)
 		slog.Debug("heartbeat error", "err", err)
 		p.mu.Lock()
 		p.pollErrors++
-		if p.pollErrors >= 3 {
+		if p.pollErrors >= 5 {
+			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
+		}
+		if p.pollErrors >= maxPollErrors {
 			slog.Warn("device unreachable (idle heartbeat), disconnecting", "consecutive_errors", p.pollErrors)
 			p.stopPollingLocked()
 			p.state = StateIdle
@@ -745,7 +749,10 @@ func (p *Player) pollOnce(ctx context.Context) {
 		slog.Debug("poll position error", "err", err)
 		p.mu.Lock()
 		p.pollErrors++
-		if p.pollErrors >= 3 {
+		if p.pollErrors >= 5 {
+			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
+		}
+		if p.pollErrors >= maxPollErrors {
 			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
 			p.stopPollingLocked()
 			p.state = StateIdle
@@ -765,7 +772,10 @@ func (p *Player) pollOnce(ctx context.Context) {
 		slog.Debug("poll state error", "err", err)
 		p.mu.Lock()
 		p.pollErrors++
-		if p.pollErrors >= 3 {
+		if p.pollErrors >= 5 {
+			slog.Warn("device connectivity degraded", "consecutive_errors", p.pollErrors)
+		}
+		if p.pollErrors >= maxPollErrors {
 			slog.Warn("device unreachable, disconnecting", "consecutive_errors", p.pollErrors)
 			p.stopPollingLocked()
 			p.state = StateIdle
