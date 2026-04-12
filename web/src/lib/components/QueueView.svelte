@@ -2,6 +2,7 @@
   import { tick, onDestroy } from 'svelte';
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { getSort } from '../stores/library.svelte';
   import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical } from 'lucide-svelte';
 
   const HAPTIC_DURATION_MS = 30;
@@ -53,6 +54,24 @@
       loading = false;
     }
     scrollToCurrent();
+  }
+
+  function formatDate(timestamp: number): string {
+    const d = new Date(timestamp * 1000);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    const month = d.toLocaleDateString('en', { month: 'short' });
+    const day = d.getDate();
+    if (d.getFullYear() !== now.getFullYear()) {
+      return `${month} '${String(d.getFullYear()).slice(2)}`;
+    }
+    return `${month} ${day}`;
   }
 
   async function scrollToCurrent() {
@@ -354,12 +373,18 @@
 
           <div class="track-details">
             <span class="track-title">{track.title}</span>
-            <span class="track-meta">
-              {track.artist || 'Unknown'}
+            <span class="track-meta">{track.artist || 'Unknown'}</span>
+          </div>
+          <div class="sort-value">
+            {#if getSort() === 'play_count'}
               {#if track.play_count > 0}
-                · {track.play_count}×
+                <span class="pcount">▶ {track.play_count}</span>
+              {:else}
+                <span class="pcount zero">—</span>
               {/if}
-            </span>
+            {:else}
+              <span class="date-val">{formatDate(track.added_at)}</span>
+            {/if}
           </div>
 
           <div class="move-buttons">
@@ -587,6 +612,34 @@
   .move-btn:disabled {
     opacity: 0.2;
     cursor: default;
+  }
+
+  .sort-value {
+    flex-shrink: 0;
+    min-width: 3.5rem;
+    text-align: right;
+    font-size: 0.75rem;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .pcount {
+    color: var(--color-accent, #4ec484);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .pcount.zero {
+    color: #444;
+    font-weight: 400;
+  }
+
+  .date-val {
+    color: #888;
+    white-space: nowrap;
   }
 
   .loading, .empty {
