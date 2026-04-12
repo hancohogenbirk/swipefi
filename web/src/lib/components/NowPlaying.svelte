@@ -80,7 +80,7 @@
         <p>{loadingNext ? 'Loading next track...' : 'Starting playback...'}</p>
       </div>
     {:else if track}
-      <div class="card-wrapper" class:loading-overlay={isLoading}>
+      <div class="card-wrapper" class:loading-overlay={isLoading || loadingNext}>
         {#key track.id}
           <SwipeCard
             {track}
