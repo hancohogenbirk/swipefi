@@ -18,6 +18,9 @@
   const ROTATION_FACTOR = 0.1;
 
   let startX = $state(0);
+  let startY = $state(0);
+  let locked = $state<'horizontal' | 'vertical' | null>(null);
+  const LOCK_THRESHOLD = 10;
   let deltaX = $state(0);
   let dragging = $state(false);
   let swiping = $state(false);
@@ -41,19 +44,39 @@
   // Touch events (mobile)
   function handleTouchStart(e: TouchEvent) {
     if (swiping) return;
-    dragging = true;
     startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
     deltaX = 0;
+    locked = null;
   }
 
   function handleTouchMove(e: TouchEvent) {
-    if (!dragging || swiping) return;
+    if (swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    if (locked === null) {
+        if (Math.abs(dx) > LOCK_THRESHOLD || Math.abs(dy) > LOCK_THRESHOLD) {
+            locked = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+            if (locked === 'horizontal') dragging = true;
+        }
+        return;
+    }
+
+    if (locked === 'vertical') return;
+
     e.preventDefault();
-    deltaX = e.touches[0].clientX - startX;
+    deltaX = dx;
   }
 
   function handleTouchEnd() {
-    if (!dragging || swiping) return;
+    if (locked === 'vertical' || !dragging || swiping) {
+        locked = null;
+        dragging = false;
+        deltaX = 0;
+        return;
+    }
+    locked = null;
     finishSwipe();
   }
 
