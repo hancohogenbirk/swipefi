@@ -3,7 +3,7 @@
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
   import { getSort } from '../stores/library.svelte';
-  import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical, Clock } from 'lucide-svelte';
+  import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical, Clock, Trash2, X } from 'lucide-svelte';
 
   const HAPTIC_DURATION_MS = 30;
   const MOUSE_DRAG_THRESHOLD_PX = 3;
@@ -44,6 +44,20 @@
   let mouseDownY = 0;
   let mouseDragPending = false;
   let pendingMouseIndex: number | null = null;
+
+  // Swipe state
+  let swipeIdx = $state<number | null>(null);
+  let swipeDeltaX = $state(0);
+  let swipeDragging = $state(false);
+  let swipeSwiping = $state(false);
+  let swipeDirection = $state<'left' | 'right' | null>(null);
+  let swipeStartX = $state(0);
+  let swipeStartY = $state(0);
+  let swipeLocked = $state<'horizontal' | 'vertical' | null>(null);
+  let collapsingId = $state<number | null>(null);
+
+  const SWIPE_THRESHOLD = 80;
+  const SWIPE_LOCK_THRESHOLD = 10;
 
   async function loadQueue() {
     loading = true;
@@ -281,6 +295,8 @@
     document.removeEventListener('touchcancel', handleDocTouchEnd);
     document.removeEventListener('mousemove', handleDocMouseMove);
     document.removeEventListener('mouseup', handleDocMouseUp);
+    document.removeEventListener('mousemove', handleSwipeMouseMove);
+    document.removeEventListener('mouseup', handleSwipeMouseUp);
     stopAutoScroll();
   });
 
@@ -326,6 +342,127 @@
     }
   }
 
+  // --- Swipe handlers (horizontal, on queue items) ---
+
+  function handleSwipeTouchStart(e: TouchEvent, idx: number) {
+    if (isDragging || swipeSwiping) return;
+    swipeStartX = e.touches[0].clientX;
+    swipeStartY = e.touches[0].clientY;
+    swipeDeltaX = 0;
+    swipeLocked = null;
+    swipeIdx = idx;
+  }
+
+  function handleSwipeTouchMove(e: TouchEvent) {
+    if (swipeIdx === null || isDragging || swipeSwiping) return;
+    const dx = e.touches[0].clientX - swipeStartX;
+    const dy = e.touches[0].clientY - swipeStartY;
+
+    if (swipeLocked === null) {
+      if (Math.abs(dx) > SWIPE_LOCK_THRESHOLD || Math.abs(dy) > SWIPE_LOCK_THRESHOLD) {
+        swipeLocked = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+        if (swipeLocked === 'horizontal') swipeDragging = true;
+      }
+      return;
+    }
+
+    if (swipeLocked === 'vertical') return;
+    e.preventDefault();
+    swipeDeltaX = dx;
+  }
+
+  function handleSwipeTouchEnd() {
+    if (swipeLocked === 'vertical' || !swipeDragging || swipeSwiping) {
+      resetSwipeState();
+      return;
+    }
+    finishSwipeGesture();
+  }
+
+  function handleSwipeMouseDown(e: MouseEvent, idx: number) {
+    if (isDragging || swipeSwiping) return;
+    swipeStartX = e.clientX;
+    swipeDeltaX = 0;
+    swipeLocked = null;
+    swipeIdx = idx;
+    swipeDragging = true;
+    document.addEventListener('mousemove', handleSwipeMouseMove);
+    document.addEventListener('mouseup', handleSwipeMouseUp);
+  }
+
+  function handleSwipeMouseMove(e: MouseEvent) {
+    if (!swipeDragging || swipeSwiping) return;
+    e.preventDefault();
+    swipeDeltaX = e.clientX - swipeStartX;
+  }
+
+  function handleSwipeMouseUp() {
+    document.removeEventListener('mousemove', handleSwipeMouseMove);
+    document.removeEventListener('mouseup', handleSwipeMouseUp);
+    if (!swipeDragging || swipeSwiping) {
+      resetSwipeState();
+      return;
+    }
+    finishSwipeGesture();
+  }
+
+  function resetSwipeState() {
+    swipeIdx = null;
+    swipeDeltaX = 0;
+    swipeDragging = false;
+    swipeLocked = null;
+  }
+
+  function finishSwipeGesture() {
+    swipeDragging = false;
+    if (swipeDeltaX < -SWIPE_THRESHOLD) {
+      triggerSwipeAction('left');
+    } else if (swipeDeltaX > SWIPE_THRESHOLD) {
+      triggerSwipeAction('right');
+    } else {
+      swipeDeltaX = 0;
+      swipeIdx = null;
+    }
+  }
+
+  async function triggerSwipeAction(direction: 'left' | 'right') {
+    if (swipeIdx === null) return;
+    const track = tracks[swipeIdx];
+    if (!track) return;
+
+    swipeSwiping = true;
+    swipeDirection = direction;
+
+    // Animate slide off screen
+    await new Promise(r => setTimeout(r, 300));
+
+    // Start collapse animation
+    swipeSwiping = false;
+    swipeDirection = null;
+    collapsingId = track.id;
+
+    // Wait for collapse animation
+    await new Promise(r => setTimeout(r, 200));
+    collapsingId = null;
+
+    // Perform the action
+    try {
+      let state;
+      if (direction === 'left') {
+        state = await api.queueReject(track.id);
+      } else {
+        state = await api.queueRemove(track.id);
+      }
+      updateState(state);
+    } catch (e) {
+      console.error('[swipefi] queue swipe action failed:', e);
+    }
+
+    // Reload queue
+    await loadQueue();
+    resetSwipeState();
+  }
+
   loadQueue();
 </script>
 
@@ -365,72 +502,95 @@
     >
       {#each tracks as track, idx (track.id)}
         <div
-          class="queue-item"
-          class:current={track.id === currentTrackId}
-          class:dragging={isDragging && dragOriginalIndex === idx}
-          data-testid="queue-item"
-          data-track-id={track.id}
-          role="button"
-          tabindex="0"
-          style={getItemStyle(idx)}
-          onclick={() => skipTo(track.id)}
-          onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
+          class="swipe-container"
+          class:collapsing={collapsingId === track.id}
         >
-          <button
-            type="button"
-            class="drag-handle"
-            data-testid="drag-handle"
-            aria-label="Reorder"
-            onclick={(e) => e.stopPropagation()}
-            ontouchstart={(e) => handleGripTouchStart(e, idx)}
-            onmousedown={(e) => handleGripMouseDown(e, idx)}
+          <!-- Reveal backgrounds -->
+          <div class="swipe-bg swipe-bg-left">
+            <Trash2 size={18} />
+          </div>
+          <div class="swipe-bg swipe-bg-right">
+            <X size={18} />
+          </div>
+
+          <div
+            class="queue-item"
+            class:current={track.id === currentTrackId}
+            class:dragging={isDragging && dragOriginalIndex === idx}
+            class:swiping-out={swipeSwiping && swipeIdx === idx}
+            data-testid="queue-item"
+            data-track-id={track.id}
+            role="button"
+            tabindex="0"
+            style="{getItemStyle(idx)}{swipeIdx === idx && (swipeDragging || swipeSwiping) ? `transform: translateX(${swipeSwiping ? (swipeDirection === 'left' ? -500 : 500) : swipeDeltaX}px);` : ''}"
+            onclick={() => { if (!swipeDragging && !swipeSwiping) skipTo(track.id); }}
+            onkeydown={(e) => { if (e.key === 'Enter' && !swipeDragging) skipTo(track.id); }}
+            ontouchstart={(e) => handleSwipeTouchStart(e, idx)}
+            ontouchmove={handleSwipeTouchMove}
+            ontouchend={handleSwipeTouchEnd}
+            onmousedown={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target.closest('.drag-handle') && !target.closest('.move-btn')) {
+                handleSwipeMouseDown(e, idx);
+              }
+            }}
           >
-            <GripVertical size={20} />
-          </button>
+            <button
+              type="button"
+              class="drag-handle"
+              data-testid="drag-handle"
+              aria-label="Reorder"
+              onclick={(e) => e.stopPropagation()}
+              ontouchstart={(e) => { e.stopPropagation(); handleGripTouchStart(e, idx); }}
+              onmousedown={(e) => handleGripMouseDown(e, idx)}
+            >
+              <GripVertical size={20} />
+            </button>
 
-          <div class="track-indicator">
-            {#if track.id === currentTrackId}
-              <Play size={14} fill="#4ec484" color="#4ec484" />
-            {:else}
-              <span class="track-num">{idx + 1}</span>
-            {/if}
-          </div>
-
-          <div class="track-details">
-            <span class="track-title">{track.title}</span>
-            <span class="track-meta">{track.artist || 'Unknown'}</span>
-          </div>
-          <div class="sort-value">
-            {#if getSort() === 'play_count'}
-              {#if track.play_count > 0}
-                <span class="pcount">▶ {track.play_count}</span>
+            <div class="track-indicator">
+              {#if track.id === currentTrackId}
+                <Play size={14} fill="#4ec484" color="#4ec484" />
               {:else}
-                <span class="pcount zero">—</span>
+                <span class="track-num">{idx + 1}</span>
               {/if}
-            {:else}
-              <span class="date-val"><Clock size={12} /> {formatDate(track.added_at)}</span>
-            {/if}
-          </div>
+            </div>
 
-          <div class="move-buttons">
-            <button
-              class="move-btn"
-              onclick={(e) => moveUp(idx, e)}
-              disabled={idx === 0}
-              aria-label="Move up"
-              data-testid="move-up"
-            >
-              <ChevronUp size={18} />
-            </button>
-            <button
-              class="move-btn"
-              onclick={(e) => moveDown(idx, e)}
-              disabled={idx === tracks.length - 1}
-              aria-label="Move down"
-              data-testid="move-down"
-            >
-              <ChevronDown size={18} />
-            </button>
+            <div class="track-details">
+              <span class="track-title">{track.title}</span>
+              <span class="track-meta">{track.artist || 'Unknown'}</span>
+            </div>
+            <div class="sort-value">
+              {#if getSort() === 'play_count'}
+                {#if track.play_count > 0}
+                  <span class="pcount">▶ {track.play_count}</span>
+                {:else}
+                  <span class="pcount zero">—</span>
+                {/if}
+              {:else}
+                <span class="date-val"><Clock size={12} /> {formatDate(track.added_at)}</span>
+              {/if}
+            </div>
+
+            <div class="move-buttons">
+              <button
+                class="move-btn"
+                onclick={(e) => moveUp(idx, e)}
+                disabled={idx === 0}
+                aria-label="Move up"
+                data-testid="move-up"
+              >
+                <ChevronUp size={18} />
+              </button>
+              <button
+                class="move-btn"
+                onclick={(e) => moveDown(idx, e)}
+                disabled={idx === tracks.length - 1}
+                aria-label="Move down"
+                data-testid="move-down"
+              >
+                <ChevronDown size={18} />
+              </button>
+            </div>
           </div>
         </div>
       {/each}
@@ -550,6 +710,48 @@
     z-index: 10;
     border-radius: 12px;
     touch-action: none;
+  }
+
+  .queue-item.swiping-out {
+    transition: transform 0.3s ease-out;
+  }
+
+  .swipe-container {
+    position: relative;
+    overflow: hidden;
+    border-radius: 10px;
+    transition: height 0.2s ease, opacity 0.2s ease, margin 0.2s ease;
+  }
+
+  .swipe-container.collapsing {
+    height: 0 !important;
+    opacity: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .swipe-bg {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 1.25rem;
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+    gap: 0.5rem;
+  }
+
+  .swipe-bg-left {
+    background: var(--color-danger, #e53935);
+    justify-content: flex-end;
+  }
+
+  .swipe-bg-right {
+    background: #444;
+    justify-content: flex-start;
   }
 
   .track-indicator {
