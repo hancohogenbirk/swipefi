@@ -667,6 +667,64 @@ func TestRecoverRendererState_BuildsFolderQueue(t *testing.T) {
 	}
 }
 
+func TestRecoverRendererState_SkipsWhenQueueExists(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetMusicDir("/tmp/music")
+
+	if err := s.UpsertTrack(ctx, &store.Track{
+		Path: "artist/album/01-song.flac", Title: "Song 1", Artist: "Artist",
+		Album: "Album", DurationMs: 180000, Format: "flac", AddedAt: 1,
+		MusicDir: "/tmp/music",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	// Pre-set a queue (simulating the user was already playing)
+	existingTracks := []store.Track{
+		{ID: 99, Path: "other/track.flac", Title: "Existing Track"},
+	}
+	p.mu.Lock()
+	p.queue = NewQueue(existingTracks)
+	p.state = StatePlaying
+	p.mu.Unlock()
+
+	mt := newMockTransport()
+	streamURL := fmt.Sprintf("http://%s:8080/stream/artist/album/01-song.flac", p.localIP)
+	mt.mu.Lock()
+	mt.uri = streamURL
+	mt.state = dlna.StatePlaying
+	mt.position = 45 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	p.SetTransport(mt)
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	currentTitle := ""
+	if p.queue != nil && p.queue.Current() != nil {
+		currentTitle = p.queue.Current().Title
+	}
+	p.mu.Unlock()
+
+	// Should NOT have replaced the existing queue
+	if currentTitle != "Existing Track" {
+		t.Errorf("expected existing queue to be preserved, got current track %q", currentTitle)
+	}
+}
+
 func TestRecoverRendererState_StoppedNoRecovery(t *testing.T) {
 	ctx := context.Background()
 

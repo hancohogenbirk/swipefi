@@ -137,6 +137,14 @@ func (p *Player) SetTransport(t dlna.Transporter) {
 // rebuilds the player queue to match. This is called on (re)connect so the
 // UI reflects the actual renderer state.
 func (p *Player) recoverRendererState(ctx context.Context, transport dlna.Transporter) {
+	// Don't clobber an existing queue — only recover when idle
+	p.mu.Lock()
+	hasQueue := p.queue != nil
+	p.mu.Unlock()
+	if hasQueue {
+		return
+	}
+
 	tState, err := transport.GetState(ctx)
 	if err != nil {
 		slog.Debug("recoverRendererState: cannot get state", "err", err)
