@@ -21,7 +21,7 @@
       parts.push(Number.isInteger(khz) ? `${khz} kHz` : `${khz.toFixed(1)} kHz`);
     }
     if (t.bit_depth) parts.push(`${t.bit_depth}-bit`);
-    if (t.bitrate_kbps) parts.push(`${Math.round(t.bitrate_kbps).toLocaleString()} kbps`);
+    if (t.bitrate_kbps) parts.push(`${Math.round(t.bitrate_kbps)} kbps`);
     return parts.join(' \u00B7 ');
   });
 
@@ -161,7 +161,7 @@
   }
 
   .format-info {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     color: #666;
     letter-spacing: 0.02em;
     white-space: nowrap;
