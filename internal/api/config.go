@@ -159,11 +159,37 @@ func (a *API) GetAppConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"music_dir":        musicDir,
-		"delete_dir":       deleteDir,
-		"connected_device": connectedDevice,
+	flacalyzerEnabled, _ := a.store.GetConfig(store.ConfigKeyFlacalyzerEnabled)
+	flacalyzerAvailable := a.analyzer.Available()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"music_dir":            musicDir,
+		"delete_dir":           deleteDir,
+		"connected_device":     connectedDevice,
+		"flacalyzer_available": flacalyzerAvailable,
+		"flacalyzer_enabled":   flacalyzerEnabled == "true",
 	})
+}
+
+func (a *API) SetFlacalyzerEnabled(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	value := "false"
+	if req.Enabled {
+		value = "true"
+	}
+	if err := a.store.SetConfig(store.ConfigKeyFlacalyzerEnabled, value); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save setting")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "flacalyzer_enabled": req.Enabled})
 }
 
 func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {

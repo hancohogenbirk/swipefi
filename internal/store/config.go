@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	ConfigKeyMusicDir    = "music_dir"
-	ConfigKeyDeviceUDN   = "selected_device_udn"
-	ConfigKeyDeviceName  = "selected_device_name"
+	ConfigKeyMusicDir          = "music_dir"
+	ConfigKeyDeviceUDN         = "selected_device_udn"
+	ConfigKeyDeviceName        = "selected_device_name"
+	ConfigKeyFlacalyzerEnabled = "flacalyzer_enabled"
 )
 
 func (s *Store) migrateConfig() error {

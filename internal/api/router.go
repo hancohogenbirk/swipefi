@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"swipefi/internal/analyzer"
 	"swipefi/internal/dlna"
 	"swipefi/internal/library"
 	"swipefi/internal/player"
@@ -19,14 +20,15 @@ type API struct {
 	scanner           *library.Scanner
 	player            *player.Player
 	discovery         *dlna.Discovery
+	analyzer          *analyzer.Analyzer
 	hub               *Hub
 	dataDir           string
 	onMusicDirChanged func(musicDir, deleteDir string)
 	processing        processingState
 }
 
-func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, hub *Hub, dataDir string) *API {
-	return &API{store: s, scanner: scanner, player: p, discovery: d, hub: hub, dataDir: dataDir}
+func NewAPI(s *store.Store, scanner *library.Scanner, p *player.Player, d *dlna.Discovery, az *analyzer.Analyzer, hub *Hub, dataDir string) *API {
+	return &API{store: s, scanner: scanner, player: p, discovery: d, analyzer: az, hub: hub, dataDir: dataDir}
 }
 
 func (a *API) SetOnMusicDirChanged(fn func(musicDir, deleteDir string)) {
@@ -76,6 +78,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 		// Config
 		r.Get("/config", api.GetAppConfig)
 		r.Post("/config/music-dir", api.SetMusicDir)
+		r.Post("/config/flacalyzer", api.SetFlacalyzerEnabled)
 		r.Get("/browse/shortcuts", api.BrowseShortcuts)
 		r.Get("/browse", api.BrowseFilesystem)
 

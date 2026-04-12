@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw } from 'lucide-svelte';
+  import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw, AudioLines } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
   let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, visible = false, scanning = false }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; visible?: boolean; scanning?: boolean } = $props();
@@ -23,12 +23,27 @@
   let saving = $state(false);
   let error = $state('');
 
+  let flacalyzerAvailable = $state(false);
+  let flacalyzerEnabled = $state(false);
+
   async function loadConfig() {
     try {
       const config = await api.config();
       musicDir = config.music_dir || '';
+      flacalyzerAvailable = config.flacalyzer_available ?? false;
+      flacalyzerEnabled = config.flacalyzer_enabled ?? false;
     } catch {
       // ignore
+    }
+  }
+
+  async function toggleFlacalyzer() {
+    const newVal = !flacalyzerEnabled;
+    try {
+      await api.setFlacalyzerEnabled(newVal);
+      flacalyzerEnabled = newVal;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to save setting';
     }
   }
 
@@ -203,6 +218,19 @@
       <div class="item-content">
         <span class="item-label">{scanning ? 'Rescanning...' : 'Rescan Library'}</span>
         <span class="item-value">Force re-read all metadata</span>
+      </div>
+    </button>
+  {/if}
+
+  {#if flacalyzerAvailable}
+    <button class="settings-item" onclick={toggleFlacalyzer}>
+      <AudioLines size={20} />
+      <div class="item-content">
+        <span class="item-label">Transcode Detection</span>
+        <span class="item-value">Flag fake lossless files with flacalyzer</span>
+      </div>
+      <div class="toggle" class:on={flacalyzerEnabled}>
+        <div class="toggle-knob"></div>
       </div>
     </button>
   {/if}
@@ -449,6 +477,35 @@
     padding: 1rem;
     color: var(--color-text-secondary);
     font-size: 0.85rem;
+  }
+
+  .toggle {
+    width: 44px;
+    height: 24px;
+    background: #444;
+    border-radius: 12px;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+
+  .toggle.on {
+    background: var(--color-accent, #4ec484);
+  }
+
+  .toggle-knob {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+  }
+
+  .toggle.on .toggle-knob {
+    transform: translateX(20px);
   }
 
   .error {

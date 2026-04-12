@@ -146,7 +146,7 @@ func run() error {
 	})
 
 	// API and router
-	a := api.NewAPI(s, scanner, p, discovery, hub, dataDir)
+	a := api.NewAPI(s, scanner, p, discovery, az, hub, dataDir)
 
 	// Handle music dir changes from the settings UI
 	a.SetOnMusicDirChanged(func(newMusicDir, newDeleteDir string) {
@@ -167,8 +167,11 @@ func run() error {
 			}
 			slog.Info("rescan complete", "tracks", count)
 
-			if err := az.Run(ctx, newMusicDir); err != nil {
-				slog.Error("transcode analysis after dir change", "err", err)
+			enabled, _ := s.GetConfig(store.ConfigKeyFlacalyzerEnabled)
+			if enabled == "true" && az.Available() {
+				if err := az.Run(ctx, newMusicDir); err != nil {
+					slog.Error("transcode analysis after dir change", "err", err)
+				}
 			}
 		}()
 	})
@@ -197,8 +200,11 @@ func run() error {
 			}
 			slog.Info("initial scan done", "tracks", count)
 
-			if err := az.Run(ctx, musicDir); err != nil {
-				slog.Error("transcode analysis failed", "err", err)
+			enabled, _ := s.GetConfig(store.ConfigKeyFlacalyzerEnabled)
+			if enabled == "true" && az.Available() {
+				if err := az.Run(ctx, musicDir); err != nil {
+					slog.Error("transcode analysis failed", "err", err)
+				}
 			}
 		}()
 

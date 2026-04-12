@@ -129,6 +129,15 @@ func (a *API) RescanLibrary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.Info("force rescan complete", "tracks", count)
+
+		// Run flacalyzer analysis if enabled
+		enabled, _ := a.store.GetConfig(store.ConfigKeyFlacalyzerEnabled)
+		if enabled == "true" && a.analyzer.Available() {
+			musicDir := a.scanner.MusicDir()
+			if err := a.analyzer.Run(context.Background(), musicDir); err != nil {
+				slog.Error("transcode analysis after rescan", "err", err)
+			}
+		}
 	}()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "scanning"})

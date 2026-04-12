@@ -162,7 +162,7 @@
         <span class="no-art-label">No cover art</span>
       </div>
     {/if}
-    {#if track.transcode_score && track.transcode_score > 0.35}
+    {#if track.transcode_score && track.transcode_score > 0}
       <div class="transcode-badge" title="{track.transcode_source || 'Unknown source'} ({Math.round(track.transcode_score * 100)}% confidence)">
         <TriangleAlert size={16} />
       </div>
