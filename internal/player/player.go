@@ -464,7 +464,7 @@ func (p *Player) Reject(ctx context.Context) error {
 
 	if p.queue.Current() == nil {
 		if p.transport != nil {
-			p.transport.Stop(ctx)
+			p.transport.Stop(p.appCtx) // Use appCtx to survive HTTP context cancellation
 		}
 		p.state = StateIdle
 		p.currentStreamURL = ""

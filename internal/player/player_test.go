@@ -3,6 +3,8 @@ package player
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -471,6 +473,118 @@ func TestPollOnce_IgnoresPositionDuringLoading(t *testing.T) {
 	}
 	if durMs != 0 {
 		t.Errorf("expected durationMs=0 during loading, got %d", durMs)
+	}
+}
+
+func TestReject_CancelledContextStillPlaysNext(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+
+	// Enable context checking
+	mt.mu.Lock()
+	mt.checkCtx = true
+	mt.mu.Unlock()
+
+	// Simulate playing track 1
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	// Create a real music dir with the test file so Reject's os.Rename doesn't fail
+	musicDir := t.TempDir()
+	deleteDir := t.TempDir()
+	p.mu.Lock()
+	p.musicDir = musicDir
+	p.deleteDir = deleteDir
+	p.mu.Unlock()
+
+	// Create the source file
+	trackDir := filepath.Join(musicDir, "artist", "album")
+	os.MkdirAll(trackDir, 0755)
+	os.WriteFile(filepath.Join(trackDir, "01-song1.flac"), []byte("fake"), 0644)
+
+	// Use a context that gets cancelled quickly (simulating HTTP timeout)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after a short delay (simulating request completion)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := p.Reject(ctx)
+	if err != nil {
+		t.Fatalf("Reject failed: %v", err)
+	}
+
+	// Give transport calls time to complete
+	time.Sleep(200 * time.Millisecond)
+
+	p.mu.Lock()
+	pos := p.queue.Position()
+	state := p.state
+	p.mu.Unlock()
+
+	// Should have advanced to next track (not stuck)
+	if state == StateIdle && pos == 0 {
+		t.Error("expected non-idle state with advanced queue position after reject")
+	}
+}
+
+func TestReject_CancelledContextStopsWhenQueueEmpty(t *testing.T) {
+	// Single-track queue: after reject, queue is empty and Stop must succeed
+	singleTrack := []store.Track{
+		{ID: 1, Path: "artist/album/01-song1.flac", Title: "Song 1", Artist: "Artist", Format: "flac"},
+	}
+	p, mt := setupTestPlayer(t, singleTrack)
+
+	// Enable context checking — Stop will fail if it receives a cancelled ctx
+	mt.mu.Lock()
+	mt.checkCtx = true
+	mt.mu.Unlock()
+
+	// Simulate playing track 1
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac"
+	p.mu.Unlock()
+
+	// Create a real music dir with the test file
+	musicDir := t.TempDir()
+	deleteDir := t.TempDir()
+	p.mu.Lock()
+	p.musicDir = musicDir
+	p.deleteDir = deleteDir
+	p.mu.Unlock()
+
+	trackDir := filepath.Join(musicDir, "artist", "album")
+	os.MkdirAll(trackDir, 0755)
+	os.WriteFile(filepath.Join(trackDir, "01-song1.flac"), []byte("fake"), 0644)
+
+	// Use an already-cancelled context (simulating HTTP timeout)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := p.Reject(ctx)
+	if err != nil {
+		t.Fatalf("Reject failed: %v", err)
+	}
+
+	// Stop should have been called successfully despite cancelled ctx
+	mt.mu.Lock()
+	stops := mt.stopCalls
+	mt.mu.Unlock()
+
+	if stops < 1 {
+		t.Errorf("expected at least 1 Stop call, got %d", stops)
+	}
+
+	p.mu.Lock()
+	state := p.state
+	p.mu.Unlock()
+
+	if state != StateIdle {
+		t.Errorf("expected StateIdle after rejecting last track, got %s", state)
 	}
 }
 
