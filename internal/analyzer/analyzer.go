@@ -152,11 +152,16 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 		return fmt.Errorf("start flacalyzer: %w", err)
 	}
 
-	// Drain stderr in background for diagnostics
+	// Collect stderr for error reporting
+	var stderrLines []string
 	go func() {
 		s := bufio.NewScanner(stderr)
 		for s.Scan() {
-			slog.Debug("flacalyzer stderr", "line", s.Text())
+			line := s.Text()
+			slog.Warn("flacalyzer stderr", "line", line)
+			if len(stderrLines) < 5 {
+				stderrLines = append(stderrLines, line)
+			}
 		}
 	}()
 
@@ -214,8 +219,12 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 
 	waitErr := cmd.Wait()
 	if waitErr != nil && runCtx.Err() == nil {
-		slog.Warn("flacalyzer exited with error", "err", waitErr)
-		a.setDone(fmt.Sprintf("flacalyzer: %v", waitErr))
+		errMsg := fmt.Sprintf("flacalyzer: %v", waitErr)
+		if len(stderrLines) > 0 {
+			errMsg = strings.Join(stderrLines, "; ")
+		}
+		slog.Warn("flacalyzer exited with error", "err", waitErr, "stderr", stderrLines)
+		a.setDone(errMsg)
 	} else if runCtx.Err() != nil {
 		a.setDone("cancelled")
 	} else {
