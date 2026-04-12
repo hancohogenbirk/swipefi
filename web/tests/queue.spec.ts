@@ -156,6 +156,22 @@ test.describe.serial('Queue management', () => {
     }
   });
 
+  test('drag handle is the first child of each queue item', async ({ page }) => {
+    await ensurePlaying(page);
+    await page.locator('.queue-btn').click();
+    await expect(page.locator('.queue-view')).toBeVisible();
+
+    const items = page.locator('[data-testid="queue-item"]');
+    const count = await items.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      // The drag handle should be the first child element of the queue item
+      const firstChild = items.nth(i).locator('> :first-child');
+      await expect(firstChild).toHaveAttribute('data-testid', 'drag-handle');
+    }
+  });
+
   test('drag handle reorders track via mouse', async ({ page }) => {
     await ensurePlaying(page);
     await page.locator('.queue-btn').click();

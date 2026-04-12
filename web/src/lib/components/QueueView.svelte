@@ -332,6 +332,18 @@
           onclick={() => skipTo(track.id)}
           onkeydown={(e) => { if (e.key === 'Enter') skipTo(track.id); }}
         >
+          <button
+            type="button"
+            class="drag-handle"
+            data-testid="drag-handle"
+            aria-label="Reorder"
+            onclick={(e) => e.stopPropagation()}
+            ontouchstart={(e) => handleGripTouchStart(e, idx)}
+            onmousedown={(e) => handleGripMouseDown(e, idx)}
+          >
+            <GripVertical size={20} />
+          </button>
+
           <div class="track-indicator">
             {#if track.id === currentTrackId}
               <Play size={14} fill="#4ec484" color="#4ec484" />
@@ -349,18 +361,6 @@
               {/if}
             </span>
           </div>
-
-          <button
-            type="button"
-            class="drag-handle"
-            data-testid="drag-handle"
-            aria-label="Reorder"
-            onclick={(e) => e.stopPropagation()}
-            ontouchstart={(e) => handleGripTouchStart(e, idx)}
-            onmousedown={(e) => handleGripMouseDown(e, idx)}
-          >
-            <GripVertical size={20} />
-          </button>
 
           <div class="move-buttons">
             <button
@@ -541,6 +541,8 @@
     cursor: grab;
     color: #555;
     padding: 0.5rem;
+    margin-left: -0.25rem;
+    margin-right: 0.25rem;
     display: flex;
     align-items: center;
     flex-shrink: 0;
