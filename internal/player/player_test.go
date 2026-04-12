@@ -25,6 +25,7 @@ type mockTransport struct {
 	stopCalls   int
 	setURICalls int
 	playErr        error
+	stopErr        error
 	getStateErr    error
 	getPositionErr error
 	// When true, SetURI/Play/Stop check ctx.Err() first and return it if
@@ -74,6 +75,9 @@ func (m *mockTransport) Stop(ctx context.Context) error {
 		}
 	}
 	m.stopCalls++
+	if m.stopErr != nil {
+		return m.stopErr
+	}
 	m.state = dlna.StateStopped
 	return nil
 }
