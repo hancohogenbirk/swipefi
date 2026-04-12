@@ -9,8 +9,8 @@ RUN npm run build
 # Stage 2: Build flacalyzer from source (always latest main)
 FROM alpine:3.21 AS flacalyzer
 RUN apk add --no-cache git flac-dev curl xz musl-dev
-RUN curl -L https://ziglang.org/download/0.15.2/zig-linux-x86_64-0.15.2.tar.xz | tar -xJ -C /usr/local && \
-    ln -s /usr/local/zig-linux-x86_64-0.15.2/zig /usr/local/bin/zig
+RUN curl -L https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz | tar -xJ -C /usr/local && \
+    ln -s /usr/local/zig-x86_64-linux-0.15.2/zig /usr/local/bin/zig
 WORKDIR /build
 RUN git clone --depth 1 https://github.com/hancohogenbirk/flacalyzer.git .
 RUN zig build -Doptimize=ReleaseFast
