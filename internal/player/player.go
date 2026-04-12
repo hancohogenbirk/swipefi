@@ -422,6 +422,12 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 	p.playStartedAt = time.Now()
 	slog.Debug("playCurrentLocked: reset playCounted", "track_id", track.ID, "title", track.Title)
 
+	// Check if renderer already started — skip the loading state entirely for fast renderers
+	if tState, err := p.transport.GetState(p.appCtx); err == nil && tState == dlna.StatePlaying {
+		p.state = StatePlaying
+		p.playStartTime = time.Now()
+	}
+
 	p.startPollingLocked(p.appCtx)
 	p.aggressivePollUntil = time.Now().Add(10 * time.Second)
 	p.notify()

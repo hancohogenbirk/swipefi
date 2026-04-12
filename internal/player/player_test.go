@@ -1796,6 +1796,28 @@ func TestSetTransport_ClearsReconnecting(t *testing.T) {
 	}
 }
 
+func TestPlayCurrentLocked_ImmediateStateTransition(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Mock: renderer transitions to PLAYING immediately on Play()
+	// (mockTransport.Play already sets state to PLAYING)
+	mt.setPosition(0, 3*time.Minute)
+
+	p.mu.Lock()
+	err := p.playCurrentLocked(ctx)
+	state := p.state
+	p.mu.Unlock()
+
+	if err != nil {
+		t.Fatalf("playCurrentLocked: %v", err)
+	}
+
+	if state != StatePlaying {
+		t.Errorf("expected immediate StatePlaying, got %s", state)
+	}
+}
+
 func TestClearReconnecting_ClearsState(t *testing.T) {
 	p, _ := setupTestPlayer(t, testTracks())
 
