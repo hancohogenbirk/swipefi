@@ -21,7 +21,7 @@
   let scrollPositions = new Map<string, number>();
   let listEl = $state<HTMLElement | null>(null);
   let baseFolderName = $state('');
-  let scanStatus = $state<{ scanning: boolean; scanned: number; total: number; phase: string } | null>(null);
+  let scanStatus = $state<{ scanning: boolean; scanned: number; total: number; phase: string; analyzing?: boolean; analyzed?: number; analysis_total?: number } | null>(null);
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
   let pathParts = $derived(
@@ -34,7 +34,7 @@
       try {
         const status = await api.scanStatus();
         scanStatus = status;
-        if (!status.scanning) {
+        if (!status.scanning && !status.analyzing) {
           stopScanPolling();
           scanStatus = null;
           await loadFolders(currentPath);
@@ -72,7 +72,7 @@
     if (folders.length === 0 && tracks.length === 0) {
       try {
         const status = await api.scanStatus();
-        if (status.scanning) {
+        if (status.scanning || status.analyzing) {
           scanStatus = status;
           startScanPolling();
           return;
@@ -224,13 +224,21 @@
     </button>
   {/if}
 
-  {#if scanStatus?.scanning}
+  {#if scanStatus?.scanning || scanStatus?.analyzing}
     <div class="scan-progress">
-      <p>Scanning library...</p>
-      <div class="scan-bar">
-        <div class="scan-fill" style="width: {scanStatus.total > 0 ? (scanStatus.scanned / scanStatus.total * 100) : 0}%"></div>
-      </div>
-      <p class="scan-count">{scanStatus.scanned.toLocaleString()} / {scanStatus.total.toLocaleString()} files</p>
+      {#if scanStatus.scanning}
+        <p>Scanning library...</p>
+        <div class="scan-bar">
+          <div class="scan-fill" style="width: {scanStatus.total > 0 ? (scanStatus.scanned / scanStatus.total * 100) : 0}%"></div>
+        </div>
+        <p class="scan-count">{scanStatus.scanned.toLocaleString()} / {scanStatus.total.toLocaleString()} files</p>
+      {:else}
+        <p>Analyzing tracks...</p>
+        <div class="scan-bar">
+          <div class="scan-fill" style="width: {(scanStatus.analysis_total ?? 0) > 0 ? ((scanStatus.analyzed ?? 0) / (scanStatus.analysis_total ?? 1) * 100) : 0}%"></div>
+        </div>
+        <p class="scan-count">{(scanStatus.analyzed ?? 0).toLocaleString()} / {(scanStatus.analysis_total ?? 0).toLocaleString()} tracks</p>
+      {/if}
     </div>
   {:else if loading}
     <div class="loading">Loading...</div>
