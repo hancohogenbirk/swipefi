@@ -524,7 +524,7 @@
 
   .analysis-fill {
     height: 100%;
-    background: var(--color-accent, #4ec484);
+    background: linear-gradient(90deg, #1db954, #7cb3ff);
     border-radius: 2px;
     transition: width 0.3s ease;
   }
