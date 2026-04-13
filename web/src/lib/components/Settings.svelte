@@ -550,7 +550,7 @@
   }
 
   .toggle.on {
-    background: var(--color-accent, #4ec484);
+    background: #7cb3ff;
   }
 
   .toggle-knob {
