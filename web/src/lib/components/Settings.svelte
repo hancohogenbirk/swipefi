@@ -25,15 +25,22 @@
 
   let flacalyzerAvailable = $state(false);
   let flacalyzerEnabled = $state(false);
+  let configLoaded = $state(false);
+
+  async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+  }
 
   async function loadConfig() {
     try {
-      const config = await api.config();
+      const config = await withTimeout(api.config(), 5000);
       musicDir = config.music_dir || '';
       flacalyzerAvailable = config.flacalyzer_available ?? false;
       flacalyzerEnabled = config.flacalyzer_enabled ?? false;
     } catch {
       // ignore
+    } finally {
+      configLoaded = true;
     }
   }
 
@@ -111,7 +118,7 @@
 
   async function loadDeviceInfo() {
     try {
-      const config = await api.config();
+      const config = await withTimeout(api.config(), 5000);
       connectedDevice = config.connected_device || '';
     } catch {
       // ignore
@@ -212,47 +219,49 @@
     </div>
   {/if}
 
-  {#if musicDir && !browseOpen}
-    <button class="settings-item rescan-item" onclick={rescanLibrary} disabled={scanning}>
+  {#if !browseOpen}
+    <button class="settings-item rescan-item" onclick={rescanLibrary} disabled={scanning || !musicDir}>
       <RefreshCw size={20} />
       <div class="item-content">
         <span class="item-label">{scanning ? 'Rescanning...' : 'Rescan Library'}</span>
-        <span class="item-value">Force re-read all metadata</span>
+        <span class="item-value">{musicDir ? 'Force re-read all metadata' : 'Set a music directory first'}</span>
       </div>
     </button>
   {/if}
 
-  {#if flacalyzerAvailable}
-    <button class="settings-item" onclick={toggleFlacalyzer}>
-      <AudioLines size={20} />
-      <div class="item-content">
-        <span class="item-label">Transcode Detection</span>
-        <span class="item-value">
-          {#if analyzing && analysisTotal > 0}
-            Analyzing: {analyzed} / {analysisTotal} files
-          {:else if analyzing}
-            Starting analysis...
-          {:else if analysisError}
-            Error: {analysisError}
-          {:else}
-            Flag fake lossless files with flacalyzer
-          {/if}
-        </span>
-        {#if analyzing && analysisTotal > 0}
-          <div class="analysis-bar">
-            <div class="analysis-fill" style="width: {Math.round((analyzed / analysisTotal) * 100)}%"></div>
-          </div>
+  <button class="settings-item" onclick={() => { if (flacalyzerAvailable) toggleFlacalyzer(); }} disabled={!flacalyzerAvailable}>
+    <AudioLines size={20} />
+    <div class="item-content">
+      <span class="item-label">Transcode Detection</span>
+      <span class="item-value">
+        {#if !configLoaded}
+          Checking availability…
+        {:else if !flacalyzerAvailable}
+          Not available on this system
+        {:else if analyzing && analysisTotal > 0}
+          Analyzing: {analyzed} / {analysisTotal} files
         {:else if analyzing}
-          <div class="analysis-bar">
-            <div class="analysis-fill indeterminate"></div>
-          </div>
+          Starting analysis...
+        {:else if analysisError}
+          Error: {analysisError}
+        {:else}
+          Flag fake lossless files with flacalyzer
         {/if}
-      </div>
-      <div class="toggle" class:on={flacalyzerEnabled}>
-        <div class="toggle-knob"></div>
-      </div>
-    </button>
-  {/if}
+      </span>
+      {#if flacalyzerAvailable && analyzing && analysisTotal > 0}
+        <div class="analysis-bar">
+          <div class="analysis-fill" style="width: {Math.round((analyzed / analysisTotal) * 100)}%"></div>
+        </div>
+      {:else if flacalyzerAvailable && analyzing}
+        <div class="analysis-bar">
+          <div class="analysis-fill indeterminate"></div>
+        </div>
+      {/if}
+    </div>
+    <div class="toggle" class:on={flacalyzerEnabled}>
+      <div class="toggle-knob"></div>
+    </div>
+  </button>
 
   <div class="section-divider"></div>
 
@@ -272,13 +281,19 @@
 
   <!-- Audio Device -->
   <div class="section-divider"></div>
-  {#if deviceLoaded}
-    <div class="settings-item device-item">
-      <Speaker size={20} />
-      <div class="item-content">
-        <span class="item-label">Audio Device</span>
-        <span class="item-value">{connectedDevice || 'Not connected'}</span>
-      </div>
+  <div class="settings-item device-item">
+    <Speaker size={20} />
+    <div class="item-content">
+      <span class="item-label">Audio Device</span>
+      <span class="item-value">
+        {#if !deviceLoaded}
+          Loading…
+        {:else}
+          {connectedDevice || 'Not connected'}
+        {/if}
+      </span>
+    </div>
+    {#if deviceLoaded}
       {#if disconnecting}
         <button class="disconnect-btn" disabled aria-label="Disconnecting">
           <span class="spinner"></span>
@@ -293,8 +308,8 @@
           <span>Select</span>
         </button>
       {/if}
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
 <style>
