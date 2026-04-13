@@ -2,7 +2,6 @@
   import { tick, onDestroy } from 'svelte';
   import { api, type Track } from '../api/client';
   import { getPlayerState, updateState } from '../stores/player.svelte';
-  import { getSort } from '../stores/library.svelte';
   import { ArrowLeft, ChevronUp, ChevronDown, Play, GripVertical, Clock, Trash2, X } from 'lucide-svelte';
 
   const HAPTIC_DURATION_MS = 30;
@@ -577,11 +576,17 @@
               <span class="track-meta">{track.artist || 'Unknown'}</span>
             </div>
             <div class="sort-value">
-              {#if getSort() === 'play_count'}
+              {#if queueSortBy === 'play_count'}
                 {#if track.play_count > 0}
                   <span class="pcount">▶ {track.play_count}</span>
                 {:else}
                   <span class="pcount zero">—</span>
+                {/if}
+              {:else if queueSortBy === 'last_played'}
+                {#if track.last_played}
+                  <span class="date-val"><Clock size={12} /> {formatDate(track.last_played)}</span>
+                {:else}
+                  <span class="date-val zero">—</span>
                 {/if}
               {:else}
                 <span class="date-val"><Clock size={12} /> {formatDate(track.added_at)}</span>
