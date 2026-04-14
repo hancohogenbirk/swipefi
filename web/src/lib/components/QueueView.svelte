@@ -580,13 +580,13 @@
                 {#if track.play_count > 0}
                   <span class="pcount">▶ {track.play_count}</span>
                 {:else}
-                  <span class="pcount zero">—</span>
+                  <span class="pcount zero"></span>
                 {/if}
               {:else if queueSortBy === 'last_played'}
                 {#if track.last_played}
                   <span class="date-val"><Clock size={12} /> {formatDate(track.last_played)}</span>
                 {:else}
-                  <span class="date-val zero">—</span>
+                  <span class="date-val zero"></span>
                 {/if}
               {:else}
                 <span class="date-val"><Clock size={12} /> {formatDate(track.added_at)}</span>
