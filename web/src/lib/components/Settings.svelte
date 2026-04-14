@@ -285,13 +285,13 @@
 
   <!-- Marked for Deletion -->
   {#if onOpenDeleted}
-    <button class="settings-item" onclick={onOpenDeleted}>
+    <button class="settings-item" onclick={onOpenDeleted} disabled={scanning}>
       <Trash2 size={20} />
       <div class="item-content">
         <span class="item-label">Marked for Deletion</span>
-        <span class="item-value">{deletedCount} file{deletedCount !== 1 ? 's' : ''}</span>
+        <span class="item-value">{#if scanning}Unavailable during scan{:else}{deletedCount} file{deletedCount !== 1 ? 's' : ''}{/if}</span>
       </div>
-      {#if deletedCount > 0}
+      {#if !scanning && deletedCount > 0}
         <span class="badge">{deletedCount}</span>
       {/if}
     </button>
