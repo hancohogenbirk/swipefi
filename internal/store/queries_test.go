@@ -1127,3 +1127,68 @@ func TestConcurrentReadsDuringWrite(t *testing.T) {
 	}
 }
 
+func TestConcurrentReadsDuringRapidSequentialWrites(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Seed 100 FLAC tracks
+	for i := 0; i < 100; i++ {
+		tr := newTrack(fmt.Sprintf("music/track%d.flac", i), fmt.Sprintf("Track %d", i), "Artist", "Album")
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatalf("seed track %d: %v", i, err)
+		}
+	}
+
+	allTracks, err := s.ListTracks(ctx, "", "added_at", "asc")
+	if err != nil {
+		t.Fatalf("list tracks: %v", err)
+	}
+
+	// Simulate analyzer: rapid individual writes (not in a transaction)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, tr := range allTracks {
+			_ = s.UpdateTranscodeAnalysis(ctx, tr.ID, 0.5, "MP3")
+		}
+	}()
+
+	// Concurrent reads must all succeed
+	var readErrors int
+	for i := 0; i < 20; i++ {
+		readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_, err := s.ListTracks(readCtx, "", "added_at", "asc")
+		cancel()
+		if err != nil {
+			readErrors++
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	<-done
+
+	if readErrors > 0 {
+		t.Errorf("expected 0 read errors during rapid writes, got %d", readErrors)
+	}
+}
+
+func TestPragmaValues(t *testing.T) {
+	s := setupTestStore(t)
+
+	var journalMode string
+	if err := s.db.QueryRow("PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("query journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Errorf("expected journal_mode=wal, got %s", journalMode)
+	}
+
+	var busyTimeout int
+	if err := s.db.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout); err != nil {
+		t.Fatalf("query busy_timeout: %v", err)
+	}
+	if busyTimeout != 5000 {
+		t.Errorf("expected busy_timeout=5000, got %d", busyTimeout)
+	}
+}
+
