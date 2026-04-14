@@ -198,6 +198,19 @@ func (a *API) SetFlacalyzerEnabled(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) SetMusicDir(w http.ResponseWriter, r *http.Request) {
+	if a.scanner.GetStatus().Scanning {
+		writeError(w, http.StatusConflict, "library scan in progress")
+		return
+	}
+	if a.analyzer.GetStatus().Running {
+		writeError(w, http.StatusConflict, "transcode analysis in progress")
+		return
+	}
+	if a.processing.Status().Active {
+		writeError(w, http.StatusConflict, "deletion processing in progress")
+		return
+	}
+
 	var req struct {
 		Path string `json:"path"`
 	}

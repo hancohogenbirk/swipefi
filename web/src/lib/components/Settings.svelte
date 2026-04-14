@@ -206,8 +206,8 @@
         {/if}
       </div>
 
-      <button class="select-btn" onclick={selectDir} disabled={saving || scanning || currentPath === musicDir}>
-        {saving ? 'Saving...' : scanning ? 'Scanning...' : currentPath === musicDir ? 'Already selected' : `Use "${currentPath.split('/').pop() || currentPath}"`}
+      <button class="select-btn" onclick={selectDir} disabled={saving || scanning || analyzing || currentPath === musicDir}>
+        {saving ? 'Saving...' : scanning ? 'Scanning...' : analyzing ? 'Analyzing...' : currentPath === musicDir ? 'Already selected' : `Use "${currentPath.split('/').pop() || currentPath}"`}
       </button>
     </div>
   {/if}
