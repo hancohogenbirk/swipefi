@@ -21,6 +21,7 @@
   let scrollPositions = new Map<string, number>();
   let listEl = $state<HTMLElement | null>(null);
   let baseFolderName = $state('');
+  let loadRetries = 0;
   let scanStatus = $state<{ scanning: boolean; scanned: number; total: number; phase: string; analyzing?: boolean; analyzed?: number; analysis_total?: number } | null>(null);
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -34,7 +35,7 @@
       try {
         const status = await api.scanStatus();
         scanStatus = status;
-        if (!status.scanning && !status.analyzing) {
+        if (!status.scanning) {
           stopScanPolling();
           scanStatus = null;
           await loadFolders(currentPath);
@@ -63,7 +64,14 @@
       // Recursive count for the "Play all" button
       const allTracks = await api.tracks(path || '', getSort(), getOrder());
       trackCount = allTracks?.length ?? 0;
+      loadRetries = 0;
     } catch (e) {
+      if (loadRetries < 3) {
+        loadRetries++;
+        loading = false;
+        setTimeout(() => loadFolders(path, restoreScroll), 1000);
+        return;
+      }
       error = e instanceof Error ? e.message : 'Failed to load folders';
     } finally {
       loading = false;
@@ -72,7 +80,7 @@
     if (folders.length === 0 && tracks.length === 0) {
       try {
         const status = await api.scanStatus();
-        if (status.scanning || status.analyzing) {
+        if (status.scanning) {
           scanStatus = status;
           startScanPolling();
           return;
@@ -224,7 +232,7 @@
     </button>
   {/if}
 
-  {#if scanStatus?.scanning || scanStatus?.analyzing}
+  {#if scanStatus?.scanning}
     <div class="scan-progress">
       {#if scanStatus.scanning}
         <p>Scanning library...</p>
