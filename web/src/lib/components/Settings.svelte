@@ -9,7 +9,7 @@
   $effect(() => {
     if (visible) {
       loadDeletedCount();
-      loadDeviceInfo();
+      refreshConfig();
     }
   });
 
@@ -31,16 +31,21 @@
     return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
   }
 
-  async function loadConfig() {
+  async function refreshConfig(retries = 2) {
     try {
       const config = await withTimeout(api.config(), 5000);
       musicDir = config.music_dir || '';
       flacalyzerAvailable = config.flacalyzer_available ?? false;
       flacalyzerEnabled = config.flacalyzer_enabled ?? false;
+      connectedDevice = config.connected_device || '';
     } catch {
-      // ignore
+      if (retries > 0) {
+        setTimeout(() => refreshConfig(retries - 1), 2000);
+        return;
+      }
     } finally {
       configLoaded = true;
+      deviceLoaded = true;
     }
   }
 
@@ -116,17 +121,6 @@
   let deviceLoaded = $state(false);
   let disconnecting = $state(false);
 
-  async function loadDeviceInfo() {
-    try {
-      const config = await withTimeout(api.config(), 5000);
-      connectedDevice = config.connected_device || '';
-    } catch {
-      // ignore
-    } finally {
-      deviceLoaded = true;
-    }
-  }
-
   async function disconnect() {
     if (disconnecting) return;
     disconnecting = true;
@@ -150,9 +144,8 @@
     }
   }
 
-  loadConfig();
+  refreshConfig();
   loadDeletedCount();
-  loadDeviceInfo();
 </script>
 
 <div class="settings">
