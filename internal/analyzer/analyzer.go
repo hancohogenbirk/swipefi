@@ -23,6 +23,9 @@ type Analyzer struct {
 	analyzed int
 	total    int
 	lastErr  string
+
+	// OnTrackAnalyzed is called after each track's transcode analysis is saved to the DB.
+	OnTrackAnalyzed func(trackID int64)
 }
 
 type flacResult struct {
@@ -210,6 +213,9 @@ func (a *Analyzer) Run(ctx context.Context, musicDir string) error {
 		if err := a.store.UpdateTranscodeAnalysis(runCtx, trackID, score, source); err != nil {
 			slog.Warn("update transcode analysis", "id", trackID, "err", err)
 			continue
+		}
+		if a.OnTrackAnalyzed != nil {
+			a.OnTrackAnalyzed(trackID)
 		}
 		analyzed++
 		a.mu.Lock()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -336,6 +337,49 @@ func TestCancel_StopsRunningAnalysis(t *testing.T) {
 	st := az.GetStatus()
 	if st.Running {
 		t.Error("expected not running after Cancel")
+	}
+}
+
+func TestRun_CallsOnTrackAnalyzed(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	for _, path := range []string{"artist/album/track1.flac", "artist/album/track2.flac"} {
+		tr := &store.Track{
+			Path: path, Title: filepath.Base(path), Format: "flac",
+			AddedAt: 1000, MusicDir: testMusicDir,
+		}
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mockBin := writeMockScript(t, `#!/bin/sh
+cat <<'NDJSON'
+{"type":"file","path":"`+testMusicDir+`/artist/album/track1.flac","verdict":"definitely_transcoded","confidence":0.9,"source_codec":"MP3"}
+{"type":"file","path":"`+testMusicDir+`/artist/album/track2.flac","verdict":"lossless","confidence":0.0,"source_codec":null}
+{"type":"summary","total_files":2,"valid_lossless":1,"definitely_transcoded":1,"likely_transcoded":0,"invalid":0,"elapsed_seconds":0.1}
+NDJSON
+`)
+
+	var called []int64
+	var mu sync.Mutex
+
+	az := &Analyzer{binPath: mockBin, store: s}
+	az.OnTrackAnalyzed = func(trackID int64) {
+		mu.Lock()
+		called = append(called, trackID)
+		mu.Unlock()
+	}
+
+	if err := az.Run(ctx, testMusicDir); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(called) != 2 {
+		t.Fatalf("expected OnTrackAnalyzed called 2 times, got %d", len(called))
 	}
 }
 

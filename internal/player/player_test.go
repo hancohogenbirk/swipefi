@@ -2221,3 +2221,77 @@ func TestPollOnce_NotifiesOnPlayingStateUpdate(t *testing.T) {
 		t.Errorf("expected 1 notification during playing poll, got %d", count)
 	}
 }
+
+func TestRefreshTrack_UpdatesCurrentAndNotifies(t *testing.T) {
+	// Insert a track into DB, then set its transcode score
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetMusicDir("/tmp/music")
+	t.Cleanup(func() { s.Close() })
+
+	ctx := context.Background()
+	dbTrack := &store.Track{
+		Path: "a/b.flac", Title: "Song", Format: "flac",
+		AddedAt: 1000, MusicDir: "/tmp/music",
+	}
+	if err := s.UpsertTrack(ctx, dbTrack); err != nil {
+		t.Fatal(err)
+	}
+	allTracks, _ := s.ListTracks(ctx, "", "added_at", "asc")
+	trackID := allTracks[0].ID
+
+	// Simulate analyzer writing transcode data
+	if err := s.UpdateTranscodeAnalysis(ctx, trackID, 0.85, "MP3"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create player with a queue containing a stale track (no transcode data)
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mt := newMockTransport()
+	p.SetTransport(mt)
+	p.mu.Lock()
+	p.queue = NewQueue([]store.Track{{ID: trackID, Path: "a/b.flac", Title: "Song"}})
+	p.mu.Unlock()
+
+	var notified atomic.Bool
+	p.SetOnChange(func(ps PlayerState) {
+		if ps.Track != nil && ps.Track.TranscodeScore == 0.85 {
+			notified.Store(true)
+		}
+	})
+
+	p.RefreshTrack(ctx, trackID)
+
+	if !notified.Load() {
+		t.Error("expected onChange called with updated transcode score")
+	}
+
+	p.mu.Lock()
+	cur := p.queue.Current()
+	p.mu.Unlock()
+	if cur.TranscodeScore != 0.85 {
+		t.Errorf("expected TranscodeScore=0.85, got %f", cur.TranscodeScore)
+	}
+}
+
+func TestRefreshTrack_IgnoresNonCurrentTrack(t *testing.T) {
+	tracks := makeTracks(3)
+	p, _ := setupTestPlayer(t, tracks)
+
+	var notified atomic.Bool
+	p.SetOnChange(func(ps PlayerState) {
+		notified.Store(true)
+	})
+
+	p.RefreshTrack(context.Background(), 2)
+
+	if notified.Load() {
+		t.Error("expected no notification for non-current track")
+	}
+}

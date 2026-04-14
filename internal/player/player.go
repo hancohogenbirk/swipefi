@@ -157,6 +157,33 @@ func (p *Player) SetTransport(t dlna.Transporter) {
 	}
 }
 
+// RefreshTrack re-reads a track from the DB and updates the queue if it matches
+// the currently playing track. Broadcasts updated state via WebSocket.
+func (p *Player) RefreshTrack(ctx context.Context, trackID int64) {
+	p.mu.Lock()
+	if p.queue == nil {
+		p.mu.Unlock()
+		return
+	}
+	cur := p.queue.Current()
+	if cur == nil || cur.ID != trackID {
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Unlock()
+
+	track, err := p.store.GetTrack(ctx, trackID)
+	if err != nil {
+		slog.Debug("RefreshTrack: failed to get track", "id", trackID, "err", err)
+		return
+	}
+
+	p.mu.Lock()
+	p.queue.UpdateTrack(*track)
+	p.notify()
+	p.mu.Unlock()
+}
+
 // recoverRendererState checks what the renderer is currently playing and
 // rebuilds the player queue to match. This is called on (re)connect so the
 // UI reflects the actual renderer state.

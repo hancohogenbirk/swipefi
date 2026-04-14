@@ -145,6 +145,12 @@ func run() error {
 		}()
 	})
 
+	// When the analyzer finishes a track, refresh the player's in-memory state
+	// so the FAKE stamp appears immediately without restarting playback.
+	az.OnTrackAnalyzed = func(trackID int64) {
+		p.RefreshTrack(ctx, trackID)
+	}
+
 	// API and router
 	a := api.NewAPI(s, scanner, p, discovery, az, hub, dataDir)
 

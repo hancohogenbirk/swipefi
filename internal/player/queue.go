@@ -110,6 +110,16 @@ func (q *Queue) Reorder(ids []int64) {
 	}
 }
 
+// UpdateTrack replaces a track in the queue by ID with fresh data.
+func (q *Queue) UpdateTrack(track store.Track) {
+	for i, t := range q.tracks {
+		if t.ID == track.ID {
+			q.tracks[i] = track
+			return
+		}
+	}
+}
+
 // UpdateCurrentPlayCount updates the play count of the current track in-memory.
 func (q *Queue) UpdateCurrentPlayCount(count int) {
 	if q.pos >= 0 && q.pos < len(q.tracks) {

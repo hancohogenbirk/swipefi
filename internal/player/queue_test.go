@@ -412,6 +412,33 @@ func TestRemoveByID_LastRemaining(t *testing.T) {
 	}
 }
 
+func TestUpdateTrack(t *testing.T) {
+	tracks := makeTracks(3)
+	q := NewQueue(tracks)
+
+	updated := store.Track{ID: 2, Title: "Track B", TranscodeScore: 0.92, TranscodeSource: "MP3 128kbps"}
+	q.UpdateTrack(updated)
+
+	cur := q.Next() // advance to position 1 (track ID 2)
+	if cur.TranscodeScore != 0.92 {
+		t.Errorf("expected TranscodeScore=0.92, got %f", cur.TranscodeScore)
+	}
+	if cur.TranscodeSource != "MP3 128kbps" {
+		t.Errorf("expected TranscodeSource='MP3 128kbps', got %q", cur.TranscodeSource)
+	}
+}
+
+func TestUpdateTrack_NotFound(t *testing.T) {
+	tracks := makeTracks(3)
+	q := NewQueue(tracks)
+
+	q.UpdateTrack(store.Track{ID: 999, Title: "Ghost"})
+
+	if q.Len() != 3 {
+		t.Errorf("expected queue length unchanged, got %d", q.Len())
+	}
+}
+
 func TestLenAndPosition(t *testing.T) {
 	tracks := makeTracks(4)
 	q := NewQueue(tracks)
