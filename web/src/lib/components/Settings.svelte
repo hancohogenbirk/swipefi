@@ -3,7 +3,7 @@
   import { Folder, ArrowUp, Zap, Trash2, Speaker, Unplug, FolderOpen, ChevronDown, ChevronUp, RefreshCw, AudioLines } from 'lucide-svelte';
   import type { Device } from '../api/client';
 
-  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, onStartPolling, visible = false, scanning = false, analyzing = false, analyzed = 0, analysisTotal = 0, analysisError = '' }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; onStartPolling?: () => void; visible?: boolean; scanning?: boolean; analyzing?: boolean; analyzed?: number; analysisTotal?: number; analysisError?: string } = $props();
+  let { onDone, onOpenDeleted, onDisconnect, onSelectDevice, onStartPolling, visible = false, scanning = false, scanned = 0, total = 0, phase = '', analyzing = false, analyzed = 0, analysisTotal = 0, analysisError = '' }: { onDone: () => void; onOpenDeleted?: () => void; onDisconnect?: () => void; onSelectDevice?: () => void; onStartPolling?: () => void; visible?: boolean; scanning?: boolean; scanned?: number; total?: number; phase?: string; analyzing?: boolean; analyzed?: number; analysisTotal?: number; analysisError?: string } = $props();
 
   // Refresh counts when tab becomes visible
   $effect(() => {
@@ -224,7 +224,32 @@
       <RefreshCw size={20} />
       <div class="item-content">
         <span class="item-label">{scanning ? 'Rescanning...' : 'Rescan Library'}</span>
-        <span class="item-value">{musicDir ? 'Force re-read all metadata' : 'Set a music directory first'}</span>
+        <span class="item-value">
+          {#if scanning && phase === 'cleanup'}
+            Removing deleted tracks...
+          {:else if scanning && total > 0}
+            Scanning: {scanned} / {total} files
+          {:else if scanning && phase === 'counting'}
+            Counting files...
+          {:else if scanning}
+            Starting scan...
+          {:else}
+            {musicDir ? 'Force re-read all metadata' : 'Set a music directory first'}
+          {/if}
+        </span>
+        {#if scanning && phase === 'cleanup'}
+          <div class="analysis-bar">
+            <div class="analysis-fill" style="width: 100%"></div>
+          </div>
+        {:else if scanning && total > 0}
+          <div class="analysis-bar">
+            <div class="analysis-fill" style="width: {Math.round((scanned / total) * 100)}%"></div>
+          </div>
+        {:else if scanning}
+          <div class="analysis-bar">
+            <div class="analysis-fill indeterminate"></div>
+          </div>
+        {/if}
       </div>
     </button>
   {/if}

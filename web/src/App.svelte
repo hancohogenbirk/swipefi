@@ -372,7 +372,7 @@
         </div>
         <span class="scan-banner-text">
           {#if scanProgress.phase === 'cleanup'}
-            Updating library...
+            Removing deleted tracks...
           {:else if scanProgress.phase === 'counting'}
             Counting files...
           {:else if scanProgress.total > 0}
@@ -405,7 +405,7 @@
         {#if showDeletedManager}
           <DeletedManager onBack={() => showDeletedManager = false} onBusyChange={(b) => deletedBusy = b} />
         {:else}
-          <Settings onDone={() => { startScanPolling(); }} onStartPolling={() => startScanPolling()} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} analysisError={scanProgress.analysis_error} />
+          <Settings onDone={() => { startScanPolling(); }} onStartPolling={() => startScanPolling()} onOpenDeleted={() => { showDeletedManager = true; history.pushState({ type: 'deleted' }, ''); }} onDisconnect={() => { appPhase = 'setup'; }} onSelectDevice={() => { appPhase = 'setup'; }} visible={activeTab === 'settings' && !showDeletedManager} scanning={scanProgress.scanning} scanned={scanProgress.scanned} total={scanProgress.total} phase={scanProgress.phase} analyzing={scanProgress.analyzing} analyzed={scanProgress.analyzed} analysisTotal={scanProgress.analysis_total} analysisError={scanProgress.analysis_error} />
         {/if}
       </div>
     </div>
