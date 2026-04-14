@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1068,6 +1069,61 @@ func TestResetTranscodeScores_SkipsDeleted(t *testing.T) {
 	got, _ := s.GetTrack(ctx, id)
 	if got.TranscodeScore != 0.9 {
 		t.Errorf("deleted track score should be unchanged, got %f", got.TranscodeScore)
+	}
+}
+
+func TestConcurrentReadsDuringWrite(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	// Seed 10 tracks
+	for i := 0; i < 10; i++ {
+		tr := newTrack(fmt.Sprintf("music/seed%d.flac", i), fmt.Sprintf("Seed %d", i), "Artist", "Album")
+		if err := s.UpsertTrack(ctx, tr); err != nil {
+			t.Fatalf("seed track %d: %v", i, err)
+		}
+	}
+
+	// Prepare a batch of 500 tracks for a long-running write
+	batch := make([]*Track, 500)
+	for i := 0; i < 500; i++ {
+		batch[i] = newTrack(fmt.Sprintf("music/batch%d.flac", i), fmt.Sprintf("Batch %d", i), "Artist", "Album")
+	}
+
+	// Hold a write transaction open to guarantee the read must use a separate connection.
+	// With MaxOpenConns(1) this will block the read; with >1 connections it won't.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	// Do actual work inside the transaction so the DB lock is held
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO tracks (path, title, artist, album, duration_ms, format, added_at, created_at, music_dir, sample_rate_hz, bit_depth, bitrate_kbps)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(path, music_dir) DO UPDATE SET title = excluded.title`)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, tr := range batch {
+		if _, err := stmt.ExecContext(ctx, tr.Path, tr.Title, tr.Artist, tr.Album, tr.DurationMs, tr.Format, tr.AddedAt, time.Now().Unix(), tr.MusicDir, 0, 0, 0); err != nil {
+			t.Fatalf("exec in tx: %v", err)
+		}
+	}
+	stmt.Close()
+	// Transaction is still open — holds the connection
+
+	// Attempt a read with a 1-second timeout — should not block behind the write
+	readCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
+	_, err = s.ListTracks(readCtx, "", "added_at", "asc")
+	if err != nil {
+		t.Fatalf("read during write should succeed, got: %v", err)
+	}
+
+	// Commit the write transaction
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 }
 

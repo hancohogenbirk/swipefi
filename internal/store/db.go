@@ -38,7 +38,7 @@ func New(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(4)
 
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
