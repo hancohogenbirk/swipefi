@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -68,6 +69,7 @@ func (h *Hub) Broadcast(state player.PlayerState) {
 	defer h.mu.Unlock()
 
 	for conn := range h.conns {
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			conn.Close()
 			delete(h.conns, conn)
