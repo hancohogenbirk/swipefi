@@ -245,4 +245,42 @@ test.describe.serial('Queue management', () => {
       expect(currentAfter).toBe(targetId);
     }).toPass({ timeout: 5_000 });
   });
+
+  test('scroll position preserved after swipe-to-remove', async ({ page }) => {
+    await ensurePlaying(page);
+    await page.locator('.queue-btn').click();
+    await expect(page.locator('.queue-view')).toBeVisible();
+
+    const items = page.locator('[data-testid="queue-item"]');
+    const count = await items.count();
+    if (count < 5) {
+      test.skip();
+      return;
+    }
+
+    // Scroll down so the current track is NOT visible
+    const queueList = page.locator('.queue-list');
+    await queueList.evaluate(el => el.scrollTop = el.scrollHeight);
+    await page.waitForTimeout(300);
+
+    // Record scroll position before swipe
+    const scrollBefore = await queueList.evaluate(el => el.scrollTop);
+
+    // Find a non-current item near the bottom and swipe it left (reject)
+    const lastNonCurrent = page.locator('[data-testid="queue-item"]:not(.current)').last();
+    const box = await lastNonCurrent.boundingBox();
+    if (!box) { test.skip(); return; }
+
+    // Perform swipe left gesture
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 100, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+
+    // Scroll position should be approximately the same (within 200px tolerance for collapse)
+    const scrollAfter = await queueList.evaluate(el => el.scrollTop);
+    const scrollDelta = Math.abs(scrollAfter - scrollBefore);
+    expect(scrollDelta).toBeLessThan(200);
+  });
 });

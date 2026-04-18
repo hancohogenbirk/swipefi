@@ -58,7 +58,7 @@
   const SWIPE_THRESHOLD = 80;
   const SWIPE_LOCK_THRESHOLD = 10;
 
-  async function loadQueue() {
+  async function loadQueue(scrollAfterLoad = true) {
     // Only show loading spinner on initial load (no tracks yet)
     const isInitial = tracks.length === 0;
     if (isInitial) loading = true;
@@ -74,7 +74,7 @@
     } finally {
       loading = false;
     }
-    scrollToCurrent();
+    if (scrollAfterLoad) scrollToCurrent();
   }
 
   function formatSortLabel(sortBy: string, sortOrder: string): string {
@@ -466,8 +466,8 @@
       console.error('[swipefi] queue swipe action failed:', e);
     }
 
-    // Reload queue, then reset all state
-    await loadQueue();
+    // Reload queue, then reset all state (preserve scroll position)
+    await loadQueue(false);
     collapsingId = null;
     swipeSwiping = false;
     swipeDirection = null;
