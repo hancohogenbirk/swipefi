@@ -2280,6 +2280,119 @@ func TestRefreshTrack_UpdatesCurrentAndNotifies(t *testing.T) {
 	}
 }
 
+func TestDisconnectNotFiredTwiceWithoutReconnect(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	p.state = StateIdle
+	p.stopPollingLocked()
+	p.mu.Unlock()
+
+	var disconnectCount atomic.Int32
+	p.SetOnDisconnect(func() {
+		disconnectCount.Add(1)
+	})
+
+	// Make heartbeat fail
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	// Backdate error to exceed timeout
+	p.mu.Lock()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	// First poll triggers disconnect
+	p.pollOnce(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	if got := disconnectCount.Load(); got != 1 {
+		t.Fatalf("expected 1 disconnect, got %d", got)
+	}
+
+	// Now simulate: transport is set back (by reconnect) but immediately fails again
+	mt2 := newMockTransport()
+	mt2.mu.Lock()
+	mt2.getStateErr = fmt.Errorf("connection refused again")
+	mt2.mu.Unlock()
+	p.SetTransport(mt2) // This resets the reconnecting flag
+
+	p.mu.Lock()
+	p.state = StateIdle
+	p.stopPollingLocked()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	// Second disconnect should fire (new transport = new disconnect cycle)
+	p.pollOnce(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	if got := disconnectCount.Load(); got != 2 {
+		t.Errorf("expected 2 total disconnects (reset after SetTransport), got %d", got)
+	}
+}
+
+func TestDisconnectNotFiredWhenAlreadyReconnecting(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	s, err := store.New(tmpDir + "/test.db")
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	p, err := New(ctx, s, "/tmp/music", "/tmp/delete", "8080")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+
+	mt := newMockTransport()
+	p.SetTransport(mt)
+
+	p.mu.Lock()
+	p.state = StateIdle
+	p.stopPollingLocked()
+	// Pre-set reconnecting to true (simulating a reconnect already in progress)
+	p.reconnecting = true
+	p.mu.Unlock()
+
+	var disconnectCount atomic.Int32
+	p.SetOnDisconnect(func() {
+		disconnectCount.Add(1)
+	})
+
+	mt.mu.Lock()
+	mt.getStateErr = fmt.Errorf("connection refused")
+	mt.mu.Unlock()
+
+	p.mu.Lock()
+	p.firstPollErrorAt = time.Now().Add(-31 * time.Second)
+	p.mu.Unlock()
+
+	p.pollOnce(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	// Should NOT fire onDisconnect because we're already reconnecting
+	if got := disconnectCount.Load(); got != 0 {
+		t.Errorf("expected 0 disconnects while already reconnecting, got %d", got)
+	}
+}
+
 func TestRefreshTrack_IgnoresNonCurrentTrack(t *testing.T) {
 	tracks := makeTracks(3)
 	p, _ := setupTestPlayer(t, tracks)

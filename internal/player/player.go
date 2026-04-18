@@ -912,11 +912,12 @@ func (p *Player) heartbeatCheck(ctx context.Context, transport dlna.Transporter)
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			wasReconnecting := p.reconnecting
 			p.reconnecting = true
 			p.notify()
 			onDisconnect := p.onDisconnect
 			p.mu.Unlock()
-			if onDisconnect != nil {
+			if onDisconnect != nil && !wasReconnecting {
 				go onDisconnect()
 			}
 			return
@@ -956,11 +957,12 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			wasReconnecting := p.reconnecting
 			p.reconnecting = true
 			p.notify()
 			onDisconnect := p.onDisconnect
 			p.mu.Unlock()
-			if onDisconnect != nil {
+			if onDisconnect != nil && !wasReconnecting {
 				go onDisconnect()
 			}
 			return
@@ -982,11 +984,12 @@ func (p *Player) pollOnce(ctx context.Context) {
 			p.state = StateIdle
 			p.transport = nil
 			p.firstPollErrorAt = time.Time{}
+			wasReconnecting := p.reconnecting
 			p.reconnecting = true
 			p.notify()
 			onDisconnect := p.onDisconnect
 			p.mu.Unlock()
-			if onDisconnect != nil {
+			if onDisconnect != nil && !wasReconnecting {
 				go onDisconnect()
 			}
 			return
