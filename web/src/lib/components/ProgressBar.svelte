@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { api } from '../api/client';
   import { getPlayerState } from '../stores/player.svelte';
 
@@ -25,12 +26,39 @@
     return parts.join(' \u00B7 ');
   });
 
+  // Interpolation state
+  let interpolatedMs = $state(0);
+  let lastWsPositionMs = $state(0);
+  let lastWsTimestamp = $state(0);
+  let rafId: number | null = null;
+
+  // Track when WS position changes
+  $effect(() => {
+    const wsPos = ps.position_ms;
+    if (wsPos !== lastWsPositionMs) {
+      lastWsPositionMs = wsPos;
+      lastWsTimestamp = performance.now();
+      interpolatedMs = wsPos;
+    }
+  });
+
+  // rAF loop for smooth interpolation
+  function tick() {
+    if (ps.state === 'playing' && !seeking && pendingSeekMs === null) {
+      const elapsed = performance.now() - lastWsTimestamp;
+      interpolatedMs = lastWsPositionMs + elapsed;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  rafId = requestAnimationFrame(tick);
+  onDestroy(() => { if (rafId !== null) cancelAnimationFrame(rafId); });
+
   let positionMs = $derived(
     idle ? 0 :
     ps.state === 'loading' ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
-    ps.position_ms
+    interpolatedMs
   );
   let durationMs = $derived(idle ? 1 : (ps.duration_ms || 1));
   let progress = $derived(Math.min((positionMs / durationMs) * 100, 100));

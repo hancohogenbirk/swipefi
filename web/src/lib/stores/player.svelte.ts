@@ -13,6 +13,7 @@ let state = $state<PlayerState>({
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let lastMessageAt = 0;
 
 export function getPlayerState(): PlayerState {
   return state;
@@ -22,6 +23,10 @@ export function updateState(newState: PlayerState) {
   state = newState;
 }
 
+export function getLastMessageAt(): number {
+  return lastMessageAt;
+}
+
 let visibilityHandlerSet = false;
 
 export function setupVisibilityHandler() {
@@ -29,6 +34,17 @@ export function setupVisibilityHandler() {
     visibilityHandlerSet = true;
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+            // Force-close stale WebSocket and reconnect (mimics F5 behavior)
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+            if (ws) {
+                ws.onclose = null; // Prevent onclose handler from triggering reconnect
+                ws.close();
+                ws = null;
+            }
+            connectWebSocket();
             loadInitialState();
         }
     });
@@ -44,6 +60,7 @@ export function connectWebSocket() {
     try {
       const newState: PlayerState = JSON.parse(event.data);
       state = newState;
+      lastMessageAt = Date.now();
     } catch {
       // ignore parse errors
     }

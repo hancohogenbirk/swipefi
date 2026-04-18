@@ -263,6 +263,55 @@ test.describe.serial('SwipeFi E2E', () => {
     await expect(page.locator('.breadcrumbs')).toContainText(folderName!);
   });
 
+  test('progress bar updates within 5 seconds after simulated tab return', async ({ page }) => {
+    const API = 'http://localhost:8080';
+    const devices = await (await page.request.get(`${API}/api/devices`)).json();
+    if (devices.length > 0) {
+      await page.request.post(`${API}/api/devices/select`, {
+        data: { udn: devices[0].udn },
+      });
+    }
+    const ps = await (await page.request.get(`${API}/api/player/state`)).json();
+    if (ps.state === 'idle') {
+      const folders = await (await page.request.get(`${API}/api/folders`)).json();
+      expect(folders.length).toBeGreaterThan(0);
+      await page.request.post(`${API}/api/player/play`, {
+        data: { folder: folders[0].path, sort: 'added_at', order: 'asc' },
+      });
+    }
+
+    await page.goto('/');
+    const bottomNav = page.locator('.bottom-nav');
+    const setup = page.locator('.center-screen');
+    await expect(bottomNav.or(setup)).toBeVisible({ timeout: 15_000 });
+    if (await setup.isVisible()) {
+      const deviceBtn = page.locator('.device-btn').first();
+      if (await deviceBtn.isVisible()) await deviceBtn.click();
+      await expect(bottomNav).toBeVisible({ timeout: 10_000 });
+    }
+    await page.locator('.nav-tab').nth(1).click();
+    await expect(page.locator('.now-playing')).toBeVisible({ timeout: 5_000 });
+    await page.waitForTimeout(2000);
+
+    // Simulate tab going to background and returning
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Read elapsed time, wait 3 seconds, read again — should have advanced
+    const time1 = await page.locator('.time.elapsed').textContent();
+    await page.waitForTimeout(3000);
+    const time2 = await page.locator('.time.elapsed').textContent();
+
+    expect(time2).not.toBe(time1);
+  });
+
   // Note: exit confirmation dialog is tested manually — Playwright's headless
   // browser doesn't reliably trigger popstate events in the same way a real
   // browser back button does. The feature works in real browsers.
