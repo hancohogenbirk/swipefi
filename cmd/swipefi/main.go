@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -104,45 +105,51 @@ func run() error {
 		hub.Broadcast(state)
 	})
 
+	var reconnectRunning atomic.Bool
+
 	p.SetOnDisconnect(func() {
-		go func() {
-			savedUDN, _ := s.GetConfig(store.ConfigKeyDeviceUDN)
-			if savedUDN == "" {
-				p.ClearReconnecting()
-				return
-			}
-			backoffs := []time.Duration{
-				2 * time.Second, 5 * time.Second, 10 * time.Second,
-				20 * time.Second, 30 * time.Second, 60 * time.Second,
-			}
-			for _, delay := range backoffs {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-				}
-				slog.Info("attempting auto-reconnect", "delay", delay)
-				if err := discovery.Scan(ctx); err != nil {
-					slog.Debug("reconnect scan failed", "err", err)
-					continue
-				}
-				renderer, ok := discovery.GetRenderer(savedUDN)
-				if !ok {
-					slog.Debug("reconnect: device not found in scan")
-					continue
-				}
-				transport := dlna.NewTransport(renderer.Transport)
-				if _, err := transport.GetState(ctx); err != nil {
-					slog.Debug("reconnect: device not responding", "err", err)
-					continue
-				}
-				p.SetTransport(transport)
-				slog.Info("auto-reconnected to device", "name", renderer.Name)
-				return
-			}
-			slog.Warn("auto-reconnect failed after all retries")
+		if !reconnectRunning.CompareAndSwap(false, true) {
+			slog.Info("reconnect loop already running, skipping")
+			return
+		}
+		defer reconnectRunning.Store(false)
+
+		savedUDN, _ := s.GetConfig(store.ConfigKeyDeviceUDN)
+		if savedUDN == "" {
 			p.ClearReconnecting()
-		}()
+			return
+		}
+		backoffs := []time.Duration{
+			2 * time.Second, 5 * time.Second, 10 * time.Second,
+			20 * time.Second, 30 * time.Second, 60 * time.Second,
+		}
+		for _, delay := range backoffs {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+			slog.Info("attempting auto-reconnect", "delay", delay)
+			if err := discovery.Scan(ctx); err != nil {
+				slog.Debug("reconnect scan failed", "err", err)
+				continue
+			}
+			renderer, ok := discovery.GetRenderer(savedUDN)
+			if !ok {
+				slog.Debug("reconnect: device not found in scan")
+				continue
+			}
+			transport := dlna.NewTransport(renderer.Transport)
+			if _, err := transport.GetState(ctx); err != nil {
+				slog.Debug("reconnect: device not responding", "err", err)
+				continue
+			}
+			p.SetTransport(transport)
+			slog.Info("auto-reconnected to device", "name", renderer.Name)
+			return
+		}
+		slog.Warn("auto-reconnect failed after all retries")
+		p.ClearReconnecting()
 	})
 
 	// When the analyzer finishes a track, refresh the player's in-memory state
