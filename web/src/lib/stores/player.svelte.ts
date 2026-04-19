@@ -2,6 +2,8 @@ import { api, type PlayerState } from '../api/client';
 
 const WS_RECONNECT_DELAY_MS = 2000;
 const WS_FALLBACK_TIMEOUT_MS = 1500;
+const WS_STALE_MS = 45_000;
+const WATCHDOG_INTERVAL_MS = 15_000;
 
 let state = $state<PlayerState>({
   state: 'idle',
@@ -14,6 +16,7 @@ let state = $state<PlayerState>({
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 let lastMessageAt = 0;
 
 let pendingSeekMs = $state<number | null>(null);
@@ -40,21 +43,34 @@ export function setPendingSeekMs(v: number | null) {
 
 let visibilityHandlerSet = false;
 
+function forceReconnect() {
+  if (ws) {
+    ws.onclose = null; // prevent cascading reconnects
+    ws.close();
+    ws = null;
+  }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  connectWebSocket();
+  loadInitialState();
+}
+
+function startWatchdog() {
+  if (watchdogTimer) return;
+  watchdogTimer = setInterval(() => {
+    if (state.state === 'idle') return;
+    const silent = Date.now() - lastMessageAt;
+    const wsBroken = !ws || ws.readyState !== WebSocket.OPEN;
+    if (silent > WS_STALE_MS || wsBroken) forceReconnect();
+  }, WATCHDOG_INTERVAL_MS);
+}
+
 export function setupVisibilityHandler() {
   if (visibilityHandlerSet) return;
   visibilityHandlerSet = true;
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
 
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    if (ws) {
-      ws.onclose = null; // prevent cascading reconnects
-      ws.close();
-      ws = null;
-    }
-
+  const onWake = () => {
     const beforeAt = lastMessageAt;
-    connectWebSocket();
+    forceReconnect();
 
     // Only fall back to HTTP if WS hasn't delivered a fresh message in time.
     setTimeout(() => {
@@ -62,7 +78,14 @@ export function setupVisibilityHandler() {
         loadInitialState();
       }
     }, WS_FALLBACK_TIMEOUT_MS);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    onWake();
   });
+  window.addEventListener('pageshow', onWake);
+  window.addEventListener('focus', onWake);
 }
 
 export function connectWebSocket() {
@@ -95,6 +118,7 @@ export function connectWebSocket() {
   };
 
   setupVisibilityHandler();
+  startWatchdog();
 }
 
 export function disconnectWebSocket() {
