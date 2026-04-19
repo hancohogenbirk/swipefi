@@ -213,22 +213,27 @@
     window.removeEventListener('popstate', handlePopState);
   });
 
+  let hasBumpedFolderRefresh = false;
+
   async function pollScanOnce() {
     try {
-      const prev = scanProgress.scanning;
       scanProgress = await api.scanStatus();
+      // Refresh folders as soon as the scan phase ends, even if flacalyzer
+      // analysis is still running. Otherwise the Folders tab never reloads
+      // for users with analysis enabled.
+      if (!hasBumpedFolderRefresh && !scanProgress.scanning) {
+        folderRefreshSignal++;
+        hasBumpedFolderRefresh = true;
+      }
       if (!scanProgress.scanning && !scanProgress.analyzing) {
         stopScanPolling();
-        // Refresh folders when scan finishes
-        if (prev) {
-          folderRefreshSignal++;
-        }
       }
     } catch { /* ignore */ }
   }
 
   function startScanPolling() {
     stopScanPolling();
+    hasBumpedFolderRefresh = false;
     // Set scanning immediately so UI reacts before the first poll returns
     scanProgress = { ...scanProgress, scanning: true };
     // Poll once immediately (no 500ms blind window), then every 500ms
