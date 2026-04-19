@@ -16,6 +16,8 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastMessageAt = 0;
 
+let pendingSeekMs = $state<number | null>(null);
+
 export function getPlayerState(): PlayerState {
   return state;
 }
@@ -26,6 +28,14 @@ export function updateState(newState: PlayerState) {
 
 export function getLastMessageAt(): number {
   return lastMessageAt;
+}
+
+export function getPendingSeekMs(): number | null {
+  return pendingSeekMs;
+}
+
+export function setPendingSeekMs(v: number | null) {
+  pendingSeekMs = v;
 }
 
 let visibilityHandlerSet = false;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
   import { api } from '../api/client';
-  import { getPlayerState } from '../stores/player.svelte';
+  import { getPlayerState, getPendingSeekMs, setPendingSeekMs } from '../stores/player.svelte';
   import {
     initial as initialInterpolator,
     applyWsUpdate,
@@ -15,7 +15,6 @@
 
   let seeking = $state(false);
   let seekValue = $state(0);
-  let pendingSeekMs = $state<number | null>(null);
 
   let ps = $derived(getPlayerState());
   let idle = $derived(ps.state === 'idle');
@@ -45,7 +44,7 @@
 
   function tick() {
     const now = performance.now();
-    if (ps.state === 'playing' && !seeking && pendingSeekMs === null) {
+    if (ps.state === 'playing' && !seeking && getPendingSeekMs() === null) {
       interp = tickPlaying(interp, now);
     } else {
       interp = tickIdle(interp, now);
@@ -56,19 +55,21 @@
   onDestroy(() => { if (rafId !== null) cancelAnimationFrame(rafId); });
 
   let durationMs = $derived(idle ? 0 : (ps.duration_ms || 0));
+  let pendingSeek = $derived(getPendingSeekMs());
   let positionMs = $derived(
     idle ? 0 :
     seeking ? seekValue :
-    pendingSeekMs !== null ? pendingSeekMs :
-    interp.position
+    pendingSeek !== null ? pendingSeek :
+    Math.max(0, Math.min(interp.position, durationMs || Infinity))
   );
   let progress = $derived(computeProgress(positionMs, durationMs));
   let remainingMs = $derived(durationMs > 0 ? Math.max(0, durationMs - positionMs) : 0);
 
   // Clear pending seek when WS position catches up (within 3s tolerance)
   $effect(() => {
-    if (pendingSeekMs !== null && Math.abs(ps.position_ms - pendingSeekMs) < SEEK_SYNC_TOLERANCE_MS) {
-      pendingSeekMs = null;
+    const pending = getPendingSeekMs();
+    if (pending !== null && Math.abs(ps.position_ms - pending) < SEEK_SYNC_TOLERANCE_MS) {
+      setPendingSeekMs(null);
     }
   });
 
@@ -95,7 +96,7 @@
     if (!seeking) return;
     const target = seekValue;
     seeking = false;
-    pendingSeekMs = target;
+    setPendingSeekMs(target);
     await api.seek(target);
   }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
-  import { getPlayerState, updateState } from '../stores/player.svelte';
+  import { getPlayerState, updateState, setPendingSeekMs } from '../stores/player.svelte';
   import { SkipBack, RotateCcw, Play, Pause, RotateCw, SkipForward } from 'lucide-svelte';
 
   const SKIP_SECONDS = 15;
@@ -25,19 +25,22 @@
 
   async function skipBack15() {
     const pos = Math.max(0, ps.position_ms - SKIP_MS);
+    setPendingSeekMs(pos);
     try {
       await api.seek(pos);
     } catch {
-      // ignore
+      setPendingSeekMs(null);
     }
   }
 
   async function skipForward15() {
     if (!canSkipForward) return;
+    const pos = ps.position_ms + SKIP_MS;
+    setPendingSeekMs(pos);
     try {
-      await api.seek(ps.position_ms + SKIP_MS);
+      await api.seek(pos);
     } catch {
-      // ignore
+      setPendingSeekMs(null);
     }
   }
 
