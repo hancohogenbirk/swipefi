@@ -270,7 +270,7 @@ func (a *API) PurgeDeleted(w http.ResponseWriter, r *http.Request) {
 			}
 
 			originalDir := filepath.Dir(filepath.Join(musicDir, filepath.FromSlash(track.Path)))
-			library.CleanupEmptyDirs(originalDir, musicDir)
+			library.CleanupOrphanedAudioDir(originalDir, musicDir)
 
 			library.CleanupEmptyDirs(filepath.Dir(deletedFilePath), deleteDir)
 

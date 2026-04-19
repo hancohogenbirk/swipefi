@@ -22,7 +22,7 @@ Self-hosted music player with a Tinder-like swipe interface for curating your co
 - Sort by date added, play count, or last played with ascending/descending toggle
 - Cover art display (embedded, MusicBrainz/Cover Art Archive fallback)
 - Deletion management — restore or permanently delete rejected files from Settings
-- Empty folder cleanup after permanent deletion (walks up directory tree)
+- Orphan folder cleanup after permanent deletion — when the last audio file in a folder is purged, the folder is removed entirely (including leftover cover art, `.cue`, `.log`, etc.); walks up the directory tree removing newly-empty ancestors
 - Cached cover art cleanup on permanent delete
 - External device takeover detection (transitions to idle when another app takes over)
 - Resilient device disconnection detection (time-based 30-second threshold tolerates network hiccups during track changes)
@@ -158,7 +158,7 @@ Rejected files are moved to `<music_dir>/to_delete/`. To manage them:
 1. Go to **Settings** tab → **Marked for Deletion**
 2. Select files with checkboxes (or "Select All")
 3. **Restore** — moves files back to their original location
-4. **Delete Forever** — permanently removes files, cleans up empty folders and cached art
+4. **Delete Forever** — permanently removes files and cached art. If a folder's last audio file is purged, the whole folder (including non-audio leftovers like cover art, `.cue` or `.log` files) is removed and empty parent folders are cleaned up
 
 ### Back Button
 
