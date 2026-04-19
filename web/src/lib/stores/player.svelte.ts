@@ -1,6 +1,7 @@
 import { api, type PlayerState } from '../api/client';
 
 const WS_RECONNECT_DELAY_MS = 2000;
+const WS_FALLBACK_TIMEOUT_MS = 1500;
 
 let state = $state<PlayerState>({
   state: 'idle',
@@ -30,24 +31,28 @@ export function getLastMessageAt(): number {
 let visibilityHandlerSet = false;
 
 export function setupVisibilityHandler() {
-    if (visibilityHandlerSet) return;
-    visibilityHandlerSet = true;
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            // Force-close stale WebSocket and reconnect (mimics F5 behavior)
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-            }
-            if (ws) {
-                ws.onclose = null; // Prevent onclose handler from triggering reconnect
-                ws.close();
-                ws = null;
-            }
-            connectWebSocket();
-            loadInitialState();
-        }
-    });
+  if (visibilityHandlerSet) return;
+  visibilityHandlerSet = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (ws) {
+      ws.onclose = null; // prevent cascading reconnects
+      ws.close();
+      ws = null;
+    }
+
+    const beforeAt = lastMessageAt;
+    connectWebSocket();
+
+    // Only fall back to HTTP if WS hasn't delivered a fresh message in time.
+    setTimeout(() => {
+      if (lastMessageAt === beforeAt) {
+        loadInitialState();
+      }
+    }, WS_FALLBACK_TIMEOUT_MS);
+  });
 }
 
 export function connectWebSocket() {

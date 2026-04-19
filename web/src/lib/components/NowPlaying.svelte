@@ -40,7 +40,7 @@
 
   async function handleSwipeLeft() {
     startLoading();
-    updateState({ ...getPlayerState(), state: 'loading' as const, position_ms: 0, duration_ms: 0 });
+    updateState({ ...getPlayerState(), state: 'loading' as const });
     try {
       const s = await api.reject();
       updateState(s);
@@ -53,7 +53,7 @@
 
   async function handleSwipeRight() {
     startLoading();
-    updateState({ ...getPlayerState(), state: 'loading' as const, position_ms: 0, duration_ms: 0 });
+    updateState({ ...getPlayerState(), state: 'loading' as const });
     try {
       const s = await api.next();
       updateState(s);

@@ -32,14 +32,27 @@
   let lastWsTimestamp = $state(0);
   let rafId: number | null = null;
 
+  const RESYNC_THRESHOLD_MS = 2000;
+  let lastTrackId = $state<number | undefined>(undefined);
+
   // Track when WS position changes
   $effect(() => {
     const wsPos = ps.position_ms;
-    if (wsPos !== lastWsPositionMs) {
+    const trackId = ps.track?.id;
+    const trackChanged = trackId !== lastTrackId;
+    const drift = Math.abs(wsPos - interpolatedMs);
+
+    if (trackChanged || drift > RESYNC_THRESHOLD_MS) {
       lastWsPositionMs = wsPos;
       lastWsTimestamp = performance.now();
       interpolatedMs = wsPos;
+    } else {
+      // Small drift: update baseline silently so interpolation stays smooth,
+      // but don't snap the displayed value.
+      lastWsPositionMs = wsPos;
+      lastWsTimestamp = performance.now();
     }
+    lastTrackId = trackId;
   });
 
   // rAF loop for smooth interpolation
@@ -55,7 +68,6 @@
 
   let positionMs = $derived(
     idle ? 0 :
-    ps.state === 'loading' ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
     interpolatedMs
