@@ -553,17 +553,28 @@ func (p *Player) Resume(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.transport == nil || p.state != StatePaused {
+	if p.transport == nil {
 		return nil
 	}
 
-	if err := p.transport.Play(ctx); err != nil {
-		return fmt.Errorf("resume: %w", err)
+	// Normal case: we were paused. Send Play; renderer resumes where it was.
+	if p.state == StatePaused {
+		if err := p.transport.Play(ctx); err != nil {
+			return fmt.Errorf("resume: %w", err)
+		}
+		p.playStartTime = time.Now()
+		p.state = StatePlaying
+		p.notify()
+		return nil
 	}
 
-	p.playStartTime = time.Now()
-	p.state = StatePlaying
-	p.notify()
+	// Recovery case: state drifted (e.g. stale session after phone sleep) but
+	// we still have a queue. Re-SetTransportURI and start playback from the
+	// current queue entry. playCurrentLocked handles notify.
+	if p.state == StateIdle && p.queue != nil && p.queue.Current() != nil {
+		return p.playCurrentLocked(ctx)
+	}
+
 	return nil
 }
 

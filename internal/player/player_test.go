@@ -2408,3 +2408,89 @@ func TestRefreshTrack_IgnoresNonCurrentTrack(t *testing.T) {
 		t.Error("expected no notification for non-current track")
 	}
 }
+
+// TestResume_FromIdleWithQueue_RestartsPlayback verifies that when the renderer
+// has silently lost its transport URI (e.g. after phone sleep) and the player
+// state has drifted to Idle while a queue is still loaded, calling Resume
+// recovers by re-sending SetURI + Play rather than silently returning nil.
+func TestResume_FromIdleWithQueue_RestartsPlayback(t *testing.T) {
+	tracks := makeTracks(3)
+	p, mt := setupTestPlayer(t, tracks)
+
+	// Force the player into the "post-sleep amnesia" scenario: queue is still
+	// populated but state drifted to Idle.
+	p.mu.Lock()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	// User presses play.
+	if err := p.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	mt.mu.Lock()
+	playCalls := mt.playCalls
+	setURICalls := mt.setURICalls
+	mt.mu.Unlock()
+
+	// Expected: playCurrentLocked path took over — URI was re-set AND Play was called.
+	if setURICalls == 0 {
+		t.Errorf("expected SetURI to be called to recover, got %d", setURICalls)
+	}
+	if playCalls == 0 {
+		t.Errorf("expected Play to be called, got %d", playCalls)
+	}
+}
+
+// TestResume_FromIdleWithoutQueue_NoOp verifies that the recovery path does
+// not fire when there is no queue — Resume should remain a no-op.
+func TestResume_FromIdleWithoutQueue_NoOp(t *testing.T) {
+	p, mt := setupTestPlayer(t, nil)
+
+	p.mu.Lock()
+	p.state = StateIdle
+	p.mu.Unlock()
+
+	if err := p.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
+	if mt.playCalls != 0 || mt.setURICalls != 0 {
+		t.Errorf("expected no renderer calls when queue is empty, got play=%d setURI=%d",
+			mt.playCalls, mt.setURICalls)
+	}
+}
+
+// TestResume_FromPaused_SendsPlay verifies the normal paused→playing path:
+// Play is sent but SetURI is not (the renderer still has the URI).
+func TestResume_FromPaused_SendsPlay(t *testing.T) {
+	tracks := makeTracks(3)
+	p, mt := setupTestPlayer(t, tracks)
+
+	p.mu.Lock()
+	p.state = StatePaused
+	p.mu.Unlock()
+
+	if err := p.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	p.mu.Lock()
+	state := p.state
+	p.mu.Unlock()
+	if state != StatePlaying {
+		t.Errorf("state = %q, want %q", state, StatePlaying)
+	}
+
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
+	if mt.playCalls != 1 {
+		t.Errorf("expected 1 Play call, got %d", mt.playCalls)
+	}
+	if mt.setURICalls != 0 {
+		t.Errorf("expected 0 SetURI calls (paused path should not re-SetURI), got %d",
+			mt.setURICalls)
+	}
+}
