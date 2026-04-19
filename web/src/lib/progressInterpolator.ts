@@ -16,10 +16,11 @@ export function applyWsUpdate(
   trackId: number | undefined,
   now: number,
 ): InterpolatorState {
+  const safePos = Math.max(0, wsPos);
   const trackChanged = trackId !== state.trackId;
-  const drift = Math.abs(wsPos - state.position);
+  const drift = Math.abs(safePos - state.position);
   if (trackChanged || drift > RESYNC_THRESHOLD_MS) {
-    return { position: wsPos, lastTickAt: now, trackId };
+    return { position: safePos, lastTickAt: now, trackId };
   }
   return { ...state, trackId };
 }
@@ -38,5 +39,5 @@ export function tickIdle(state: InterpolatorState, now: number): InterpolatorSta
 
 export function computeProgress(positionMs: number, durationMs: number): number {
   if (durationMs <= 0) return 0;
-  return Math.min((positionMs / durationMs) * 100, 100);
+  return Math.max(0, Math.min((positionMs / durationMs) * 100, 100));
 }

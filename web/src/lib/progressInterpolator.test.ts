@@ -153,6 +153,28 @@ describe('progressInterpolator', () => {
     });
   });
 
+  describe('applyWsUpdate — negative wsPos defense', () => {
+    it('clamps negative wsPos to 0 on track start', () => {
+      let s = initial();
+      s = applyWsUpdate(s, -500, 1, 0);
+      expect(s.position).toBe(0);
+    });
+
+    it('clamps negative wsPos to 0 on large backward drift', () => {
+      let s = initial();
+      s = applyWsUpdate(s, 5000, 1, 0);
+      s = tickPlaying(s, 1000); // pos ~6000
+      s = applyWsUpdate(s, -100, 1, 1100);
+      expect(s.position).toBe(0);
+    });
+  });
+
+  describe('computeProgress — negative position defense', () => {
+    it('returns 0% for negative positionMs', () => {
+      expect(computeProgress(-500, 180_000)).toBe(0);
+    });
+  });
+
   describe('pause and resume (no forward jump)', () => {
     it('does not leak paused wall-clock time into position on resume', () => {
       let s = initial();
