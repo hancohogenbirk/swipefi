@@ -1,7 +1,5 @@
-// Package version exposes build metadata populated at link time via -ldflags.
+// Package version exposes the current release version.
+// Bump this constant for every meaningful release and commit.
 package version
 
-var (
-	Commit    = "dev"
-	BuildDate = "unknown"
-)
+const Version = "0.1.0"

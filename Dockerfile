@@ -18,17 +18,13 @@ RUN git clone --depth 1 https://github.com/hancohogenbirk/flacalyzer.git . && \
 
 # Stage 3: Build Go binary with embedded frontend
 FROM golang:1.26-alpine AS backend
-ARG GIT_SHA=dev
-ARG BUILD_DATE=unknown
 RUN apk add --no-cache upx ca-certificates tzdata
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /build/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X swipefi/internal/version.Commit=${GIT_SHA} -X swipefi/internal/version.BuildDate=${BUILD_DATE}" \
-      -o /swipefi ./cmd/swipefi && \
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /swipefi ./cmd/swipefi && \
     upx --best --lzma /swipefi
 
 # Stage 4: Alpine runtime (needed for flacalyzer subprocess + libFLAC)

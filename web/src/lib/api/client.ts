@@ -58,7 +58,7 @@ export interface PlayerState {
 
 export const api = {
   // Build info
-  version: () => request<{ commit: string; built_at: string }>('GET', '/api/version'),
+  version: () => request<{ version: string }>('GET', '/api/version'),
 
   // Library
   folders: (path = '') => request<Folder[]>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
