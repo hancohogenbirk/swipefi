@@ -44,6 +44,7 @@ func NewRouter(api *API, frontendFS fs.FS) *chi.Mux {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", api.Health)
+		r.Get("/version", api.GetVersion)
 
 		// Library
 		r.Get("/folders", api.ListFolders)

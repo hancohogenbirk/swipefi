@@ -87,6 +87,8 @@
   let playerState = $derived(getPlayerState());
   let scanProgress = $state({ scanning: false, scanned: 0, total: 0, phase: '', analyzing: false, analyzed: 0, analysis_total: 0, analysis_error: '' });
   let scanPollTimer: ReturnType<typeof setInterval> | null = null;
+  let buildInfo = $state<{ commit: string; built_at: string } | null>(null);
+  api.version().then(v => { buildInfo = v; }).catch(() => {});
 
   // --- History API for back button ---
   let folderHistory = $state<string[]>([]);
@@ -305,6 +307,9 @@
   {#if appPhase === 'loading'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
+      {#if buildInfo}
+        <p class="version">{buildInfo.commit} · {buildInfo.built_at}</p>
+      {/if}
       {#if scanProgress.scanning && scanProgress.total > 0}
         <div class="scan-progress">
           <div class="scan-bar">
@@ -325,6 +330,9 @@
   {:else if appPhase === 'setup'}
     <div class="center-screen">
       <h1 class="logo">SwipeFi</h1>
+      {#if buildInfo}
+        <p class="version">{buildInfo.commit} · {buildInfo.built_at}</p>
+      {/if}
 
       {#if scanProgress.scanning && scanProgress.total > 0}
         <div class="scan-progress">
@@ -464,6 +472,14 @@
   .subtitle {
     color: var(--color-text-secondary);
     font-size: 1rem;
+  }
+
+  .version {
+    color: #555;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    margin: -0.25rem 0 0.5rem 0;
   }
 
   .scan-progress {

@@ -57,6 +57,9 @@ export interface PlayerState {
 }
 
 export const api = {
+  // Build info
+  version: () => request<{ commit: string; built_at: string }>('GET', '/api/version'),
+
   // Library
   folders: (path = '') => request<Folder[]>('GET', `/api/folders?path=${encodeURIComponent(path)}`),
   tracks: (folder: string, sort = 'added_at', order = 'asc') =>
