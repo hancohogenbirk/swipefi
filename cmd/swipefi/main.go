@@ -99,7 +99,7 @@ func run() error {
 	discovery := dlna.NewDiscovery()
 
 	// WebSocket hub
-	hub := api.NewHub(nil)
+	hub := api.NewHub(p.GetState)
 
 	p.SetOnChange(func(state player.PlayerState) {
 		hub.Broadcast(state)

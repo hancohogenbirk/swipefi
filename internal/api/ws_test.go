@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,4 +128,48 @@ func waitUntil(t *testing.T, timeout time.Duration, cond func() bool, msg string
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal(msg)
+}
+
+// TestWS_InitialStateSentOnConnect verifies that a newly connected client
+// receives the current player state immediately, without having to wait for
+// the next broadcast. Without this, a client that connects while playback
+// is idle learns nothing until state changes.
+func TestWS_InitialStateSentOnConnect(t *testing.T) {
+	want := player.PlayerState{
+		State:      "playing",
+		PositionMs: 12345,
+		DurationMs: 678000,
+	}
+	hub := NewHub(func() player.PlayerState { return want })
+
+	srv := httptest.NewServer(http.HandlerFunc(hub.HandleWS))
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read initial message: %v", err)
+	}
+
+	var got player.PlayerState
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if got.State != want.State {
+		t.Errorf("state = %q, want %q", got.State, want.State)
+	}
+	if got.PositionMs != want.PositionMs {
+		t.Errorf("positionMs = %d, want %d", got.PositionMs, want.PositionMs)
+	}
+	if got.DurationMs != want.DurationMs {
+		t.Errorf("durationMs = %d, want %d", got.DurationMs, want.DurationMs)
+	}
 }
