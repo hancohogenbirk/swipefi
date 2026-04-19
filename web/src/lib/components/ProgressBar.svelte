@@ -1,7 +1,14 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { api } from '../api/client';
   import { getPlayerState } from '../stores/player.svelte';
+  import {
+    initial as initialInterpolator,
+    applyWsUpdate,
+    tickPlaying,
+    tickIdle,
+    type InterpolatorState,
+  } from '../progressInterpolator';
 
   const SEEK_SYNC_TOLERANCE_MS = 3000;
 
@@ -26,40 +33,21 @@
     return parts.join(' \u00B7 ');
   });
 
-  // Interpolation state
-  let interpolatedMs = $state(0);
-  let lastWsPositionMs = $state(0);
-  let lastWsTimestamp = $state(0);
+  let interp = $state<InterpolatorState>(initialInterpolator());
   let rafId: number | null = null;
 
-  const RESYNC_THRESHOLD_MS = 2000;
-  let lastTrackId = $state<number | undefined>(undefined);
-
-  // Track when WS position changes
   $effect(() => {
     const wsPos = ps.position_ms;
     const trackId = ps.track?.id;
-    const trackChanged = trackId !== lastTrackId;
-    const drift = Math.abs(wsPos - interpolatedMs);
-
-    if (trackChanged || drift > RESYNC_THRESHOLD_MS) {
-      lastWsPositionMs = wsPos;
-      lastWsTimestamp = performance.now();
-      interpolatedMs = wsPos;
-    } else {
-      // Small drift: update baseline silently so interpolation stays smooth,
-      // but don't snap the displayed value.
-      lastWsPositionMs = wsPos;
-      lastWsTimestamp = performance.now();
-    }
-    lastTrackId = trackId;
+    interp = applyWsUpdate(untrack(() => interp), wsPos, trackId, performance.now());
   });
 
-  // rAF loop for smooth interpolation
   function tick() {
+    const now = performance.now();
     if (ps.state === 'playing' && !seeking && pendingSeekMs === null) {
-      const elapsed = performance.now() - lastWsTimestamp;
-      interpolatedMs = lastWsPositionMs + elapsed;
+      interp = tickPlaying(interp, now);
+    } else {
+      interp = tickIdle(interp, now);
     }
     rafId = requestAnimationFrame(tick);
   }
@@ -70,7 +58,7 @@
     idle ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
-    interpolatedMs
+    interp.position
   );
   let durationMs = $derived(idle ? 1 : (ps.duration_ms || 1));
   let progress = $derived(Math.min((positionMs / durationMs) * 100, 100));
