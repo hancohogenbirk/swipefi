@@ -2569,3 +2569,86 @@ func TestNext_SeeksRendererToZero(t *testing.T) {
 		t.Errorf("expected a Seek call after Play, callOrder=%v", mt.callOrder)
 	}
 }
+
+// TestPollOnce_IgnoresStaleURIDuringTrackTransition verifies that when the
+// renderer is still reporting the *previous* track's URI and position
+// immediately after a track change, the poll goroutine does NOT overwrite
+// positionMs with the stale value. Without the guard, Track B can flash
+// Track A's position (e.g. 1:30) in the UI right after pressing Next.
+func TestPollOnce_IgnoresStaleURIDuringTrackTransition(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	// Simulate: track change just happened, player is already in Playing
+	// state (skipping Loading), but the renderer is still reporting the
+	// previous track's URI and position.
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now()       // within 2s grace window
+	p.playStartTime = time.Now()
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/artist/album/02-song2.flac"
+	p.positionMs = 0
+	p.mu.Unlock()
+
+	// Renderer still reports the OLD track URI with a 90s position.
+	mt.mu.Lock()
+	mt.state = dlna.StatePlaying
+	mt.uri = "http://192.168.1.1:8080/stream/artist/album/01-song1.flac" // stale
+	mt.position = 90 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	positionMs := p.positionMs
+	state := p.state
+	streamURL := p.currentStreamURL
+	p.mu.Unlock()
+
+	// Position must NOT be overwritten with the stale 90s value.
+	if positionMs == 90_000 {
+		t.Errorf("positionMs was overwritten with stale URI's position (90000ms); want unchanged")
+	}
+
+	// Must NOT go idle within the grace window — the URI mismatch is
+	// transitional, not an external takeover.
+	if state == StateIdle {
+		t.Errorf("expected state to remain %q within grace window, got %q", StatePlaying, state)
+	}
+	if streamURL == "" {
+		t.Errorf("currentStreamURL was cleared within grace window; want preserved")
+	}
+}
+
+// TestPollOnce_ExternalTakeoverAfterGracePeriod verifies that a URI mismatch
+// is still treated as external takeover once the 2-second grace window has
+// elapsed. Without this, the player would never detect a genuine takeover.
+func TestPollOnce_ExternalTakeoverAfterGracePeriod(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+	ctx := context.Background()
+
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.playStartedAt = time.Now().Add(-10 * time.Second) // well past grace window
+	p.playStartTime = time.Now().Add(-10 * time.Second)
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/ours.flac"
+	p.mu.Unlock()
+
+	mt.mu.Lock()
+	mt.state = dlna.StatePlaying
+	mt.uri = "http://elsewhere/stream.flac"
+	mt.position = 30 * time.Second
+	mt.duration = 3 * time.Minute
+	mt.mu.Unlock()
+
+	p.pollOnce(ctx)
+
+	p.mu.Lock()
+	state := p.state
+	p.mu.Unlock()
+
+	if state != StateIdle {
+		t.Errorf("expected StateIdle after external takeover past grace window, got %q", state)
+	}
+}

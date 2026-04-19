@@ -1027,17 +1027,32 @@ func (p *Player) pollOnce(ctx context.Context) {
 	// from the previous track while transitioning. Also skip the external
 	// source check since the URI may be stale during loading.
 	if p.state != StateLoading {
-		p.positionMs = pos.RelTime.Milliseconds()
-		p.durationMs = pos.TrackDuration.Milliseconds()
+		// URI-gated update: if the renderer is still reporting the
+		// previous track's URI (stale) immediately after a track change,
+		// don't overwrite positionMs with the old track's position and
+		// don't treat it as external takeover. The 2-second window is
+		// long enough to cover a slow renderer's internal transition but
+		// short enough that a real external takeover is still detected.
+		uriMismatch := pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL
+		transitional := uriMismatch && time.Since(p.playStartedAt) < 2*time.Second
 
-		// Check if another source took over the device
-		if pos.TrackURI != "" && p.currentStreamURL != "" && pos.TrackURI != p.currentStreamURL {
-			slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
-			p.state = StateIdle
-			p.currentStreamURL = ""
-			p.stopPollingLocked()
-			p.notify()
-			return
+		if transitional {
+			slog.Debug("skipping stale-URI position update during track transition",
+				"expected", p.currentStreamURL, "actual", pos.TrackURI,
+				"elapsed", time.Since(p.playStartedAt))
+		} else {
+			p.positionMs = pos.RelTime.Milliseconds()
+			p.durationMs = pos.TrackDuration.Milliseconds()
+
+			// Check if another source took over the device
+			if uriMismatch {
+				slog.Info("external source took over device", "expected", p.currentStreamURL, "actual", pos.TrackURI)
+				p.state = StateIdle
+				p.currentStreamURL = ""
+				p.stopPollingLocked()
+				p.notify()
+				return
+			}
 		}
 	}
 
