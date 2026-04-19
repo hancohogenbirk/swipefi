@@ -9,6 +9,10 @@
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing' || ps.state === 'loading');
   let idle = $derived(ps.state === 'idle' && !ps.track);
+  let remainingMs = $derived(
+    ps.duration_ms > 0 ? ps.duration_ms - ps.position_ms : 0
+  );
+  let canSkipForward = $derived(!idle && ps.duration_ms > 0 && remainingMs > SKIP_MS);
 
   async function togglePlay() {
     try {
@@ -29,6 +33,7 @@
   }
 
   async function skipForward15() {
+    if (!canSkipForward) return;
     try {
       await api.seek(ps.position_ms + SKIP_MS);
     } catch {
@@ -73,7 +78,12 @@
     {/if}
   </button>
 
-  <button class="transport-btn skip-btn" onclick={skipForward15} aria-label="Forward 15 seconds" disabled={idle}>
+  <button
+    class="transport-btn skip-btn"
+    onclick={skipForward15}
+    aria-label="Forward 15 seconds"
+    disabled={!canSkipForward}
+  >
     <RotateCw size={32} />
     <span class="skip-label">15</span>
   </button>
@@ -106,6 +116,15 @@
 
   .transport-btn:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  .transport-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .transport-btn:disabled:hover {
+    background: none;
   }
 
   .skip-btn {
