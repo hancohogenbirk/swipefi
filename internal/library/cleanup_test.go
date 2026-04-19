@@ -162,3 +162,141 @@ func TestCleanupEmptyDirs(t *testing.T) {
 		}
 	})
 }
+
+func TestCleanupOrphanedAudioDir(t *testing.T) {
+	t.Run("removes dir containing only non-audio files", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		dir := filepath.Join(root, "Artist", "Album")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Non-audio residuals (no flacs)
+		os.WriteFile(filepath.Join(dir, "cover.jpg"), []byte("jpg"), 0o644)
+		os.WriteFile(filepath.Join(dir, "album.cue"), []byte("cue"), 0o644)
+		os.WriteFile(filepath.Join(dir, "album.log"), []byte("log"), 0o644)
+
+		CleanupOrphanedAudioDir(dir, root)
+
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Error("expected dir with only non-audio files to be removed")
+		}
+		if _, err := os.Stat(filepath.Join(root, "Artist")); !os.IsNotExist(err) {
+			t.Error("expected empty parent to be removed too")
+		}
+	})
+
+	t.Run("keeps dir that still has an audio file", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		dir := filepath.Join(root, "Artist", "Album")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(dir, "01.flac"), []byte("audio"), 0o644)
+		os.WriteFile(filepath.Join(dir, "cover.jpg"), []byte("jpg"), 0o644)
+
+		CleanupOrphanedAudioDir(dir, root)
+
+		if _, err := os.Stat(dir); err != nil {
+			t.Error("expected dir with audio file to be kept")
+		}
+		if _, err := os.Stat(filepath.Join(dir, "cover.jpg")); err != nil {
+			t.Error("expected non-audio file to be kept alongside audio")
+		}
+	})
+
+	t.Run("walks up and removes empty parents", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		leaf := filepath.Join(root, "a", "b", "c")
+		if err := os.MkdirAll(leaf, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(leaf, "cover.jpg"), []byte("jpg"), 0o644)
+
+		CleanupOrphanedAudioDir(leaf, root)
+
+		for _, dir := range []string{
+			filepath.Join(root, "a", "b", "c"),
+			filepath.Join(root, "a", "b"),
+			filepath.Join(root, "a"),
+		} {
+			if _, err := os.Stat(dir); !os.IsNotExist(err) {
+				t.Errorf("expected %s to be removed, but it still exists", dir)
+			}
+		}
+	})
+
+	t.Run("stops walking at audio-bearing ancestor", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		// root/Artist/Album/extras (orphan) — Artist/other-album has a flac
+		extras := filepath.Join(root, "Artist", "Album", "extras")
+		if err := os.MkdirAll(extras, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(extras, "notes.txt"), []byte("x"), 0o644)
+		sibling := filepath.Join(root, "Artist", "other-album")
+		if err := os.MkdirAll(sibling, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(sibling, "01.flac"), []byte("audio"), 0o644)
+
+		CleanupOrphanedAudioDir(extras, root)
+
+		// extras and Album may be gone, but Artist must remain (has audio-bearing sibling)
+		if _, err := os.Stat(filepath.Join(root, "Artist")); err != nil {
+			t.Error("expected Artist to remain (sibling has audio)")
+		}
+		if _, err := os.Stat(sibling); err != nil {
+			t.Error("expected audio sibling to remain")
+		}
+	})
+
+	t.Run("stops at stopAt and never removes it", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		leaf := filepath.Join(root, "sub")
+		if err := os.MkdirAll(leaf, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(leaf, "a.cue"), []byte("cue"), 0o644)
+
+		CleanupOrphanedAudioDir(leaf, root)
+
+		if _, err := os.Stat(root); err != nil {
+			t.Errorf("stopAt dir was removed, but it should not be: %v", err)
+		}
+	})
+
+	t.Run("handles non-existent dir gracefully", func(t *testing.T) {
+		root, err := os.MkdirTemp("", "orphan-test-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(root)
+
+		CleanupOrphanedAudioDir(filepath.Join(root, "nope"), root)
+	})
+}
