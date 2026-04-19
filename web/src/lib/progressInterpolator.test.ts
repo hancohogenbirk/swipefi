@@ -4,6 +4,7 @@ import {
   applyWsUpdate,
   tickPlaying,
   tickIdle,
+  computeProgress,
   RESYNC_THRESHOLD_MS,
 } from './progressInterpolator';
 
@@ -124,6 +125,31 @@ describe('progressInterpolator', () => {
       s = applyWsUpdate(s, 10_000, 1, 0);
       s = tickIdle(s, 5000);
       expect(s.position).toBe(10_000);
+    });
+  });
+
+  describe('computeProgress (unknown duration must not flash to 100%)', () => {
+    it('returns 0 when duration is zero (unknown)', () => {
+      expect(computeProgress(0, 0)).toBe(0);
+    });
+
+    it('returns 0 when duration is zero even if position has advanced', () => {
+      // This is the "track just started, renderer has not reported duration
+      // yet, interpolator already ticked forward" scenario. The bar must stay
+      // at 0% rather than flashing to 100% via the division.
+      expect(computeProgress(500, 0)).toBe(0);
+    });
+
+    it('clamps at 100% when position exceeds duration', () => {
+      expect(computeProgress(200_000, 180_000)).toBe(100);
+    });
+
+    it('computes proportional progress for real values', () => {
+      expect(computeProgress(90_000, 180_000)).toBe(50);
+    });
+
+    it('treats negative duration as unknown', () => {
+      expect(computeProgress(500, -1)).toBe(0);
     });
   });
 

@@ -7,6 +7,7 @@
     applyWsUpdate,
     tickPlaying,
     tickIdle,
+    computeProgress,
     type InterpolatorState,
   } from '../progressInterpolator';
 
@@ -54,14 +55,15 @@
   rafId = requestAnimationFrame(tick);
   onDestroy(() => { if (rafId !== null) cancelAnimationFrame(rafId); });
 
+  let durationMs = $derived(idle ? 0 : (ps.duration_ms || 0));
   let positionMs = $derived(
     idle ? 0 :
     seeking ? seekValue :
     pendingSeekMs !== null ? pendingSeekMs :
     interp.position
   );
-  let durationMs = $derived(idle ? 1 : (ps.duration_ms || 1));
-  let progress = $derived(Math.min((positionMs / durationMs) * 100, 100));
+  let progress = $derived(computeProgress(positionMs, durationMs));
+  let remainingMs = $derived(durationMs > 0 ? Math.max(0, durationMs - positionMs) : 0);
 
   // Clear pending seek when WS position catches up (within 3s tolerance)
   $effect(() => {
@@ -126,7 +128,7 @@
     {#if formatInfo}
       <span class="format-info">{formatInfo}</span>
     {/if}
-    <span class="time remaining">-{formatTime(durationMs - positionMs)}</span>
+    <span class="time remaining">-{formatTime(remainingMs)}</span>
   </div>
 </div>
 

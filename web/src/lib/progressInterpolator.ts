@@ -35,3 +35,8 @@ export function tickPlaying(state: InterpolatorState, now: number): Interpolator
 export function tickIdle(state: InterpolatorState, now: number): InterpolatorState {
   return { ...state, lastTickAt: now };
 }
+
+export function computeProgress(positionMs: number, durationMs: number): number {
+  if (durationMs <= 0) return 0;
+  return Math.min((positionMs / durationMs) * 100, 100);
+}
