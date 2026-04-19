@@ -455,6 +455,15 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 		p.playStartTime = time.Now()
 	}
 
+	// Force the renderer to position 0 on every track change. Some renderers
+	// (e.g. Wiim Ultra) carry the previous track's seek offset across
+	// SetAVTransportURI, causing the new track to audibly start at that
+	// offset. Seek(0) after Play guarantees a clean start. Errors are
+	// non-fatal — the renderer usually starts at 0 anyway.
+	if err := p.transport.Seek(p.appCtx, 0); err != nil {
+		slog.Warn("seek to zero after track change failed", "track", track.Title, "err", err)
+	}
+
 	p.startPollingLocked(p.appCtx)
 	p.aggressivePollUntil = time.Now().Add(10 * time.Second)
 	p.notify()

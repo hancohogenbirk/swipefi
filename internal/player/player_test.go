@@ -25,6 +25,11 @@ type mockTransport struct {
 	playCalls   int
 	stopCalls   int
 	setURICalls int
+	seekCalls   int
+	seekTargets []time.Duration
+	// callOrder records the sequence of transport calls (e.g. "Play", "Seek")
+	// so tests can assert relative ordering.
+	callOrder      []string
 	playErr        error
 	stopErr        error
 	getStateErr    error
@@ -60,6 +65,7 @@ func (m *mockTransport) Play(ctx context.Context) error {
 		}
 	}
 	m.playCalls++
+	m.callOrder = append(m.callOrder, "Play")
 	if m.playErr != nil {
 		return m.playErr
 	}
@@ -90,7 +96,12 @@ func (m *mockTransport) Pause(_ context.Context) error {
 	return nil
 }
 
-func (m *mockTransport) Seek(_ context.Context, _ time.Duration) error {
+func (m *mockTransport) Seek(_ context.Context, target time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.seekCalls++
+	m.seekTargets = append(m.seekTargets, target)
+	m.callOrder = append(m.callOrder, "Seek")
 	return nil
 }
 
@@ -2492,5 +2503,69 @@ func TestResume_FromPaused_SendsPlay(t *testing.T) {
 	if mt.setURICalls != 0 {
 		t.Errorf("expected 0 SetURI calls (paused path should not re-SetURI), got %d",
 			mt.setURICalls)
+	}
+}
+
+// TestNext_SeeksRendererToZero verifies that on a track change, the player
+// explicitly seeks the renderer to position 0 after Play. Some DLNA renderers
+// (e.g. Wiim Ultra) carry the seek offset from the previous track across
+// SetAVTransportURI, causing the new track to audibly start at the old
+// position. The fix forces Seek(0) on every track change.
+func TestNext_SeeksRendererToZero(t *testing.T) {
+	tracks := makeTracks(3)
+	p, mt := setupTestPlayer(t, tracks)
+
+	// Clear any calls from setup.
+	mt.mu.Lock()
+	mt.callOrder = nil
+	mt.seekCalls = 0
+	mt.seekTargets = nil
+	mt.mu.Unlock()
+
+	// Simulate that track 1 is currently playing — Next will advance to track 2.
+	p.mu.Lock()
+	p.state = StatePlaying
+	p.currentStreamURL = "http://192.168.1.1:8080/stream/0-song-0.flac"
+	p.mu.Unlock()
+
+	if err := p.Next(context.Background()); err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
+
+	if mt.seekCalls < 1 {
+		t.Fatalf("expected at least 1 Seek call on track change, got %d", mt.seekCalls)
+	}
+
+	// The first Seek after the track change must target zero.
+	gotZero := false
+	for _, d := range mt.seekTargets {
+		if d == 0 {
+			gotZero = true
+			break
+		}
+	}
+	if !gotZero {
+		t.Errorf("expected a Seek(0) call, got targets=%v", mt.seekTargets)
+	}
+
+	// Seek must come AFTER Play — otherwise the renderer won't honour it.
+	lastPlayIdx := -1
+	firstSeekAfterPlay := -1
+	for i, c := range mt.callOrder {
+		if c == "Play" {
+			lastPlayIdx = i
+		}
+		if c == "Seek" && lastPlayIdx >= 0 && firstSeekAfterPlay < 0 {
+			firstSeekAfterPlay = i
+		}
+	}
+	if lastPlayIdx < 0 {
+		t.Fatalf("expected at least one Play call, callOrder=%v", mt.callOrder)
+	}
+	if firstSeekAfterPlay < 0 {
+		t.Errorf("expected a Seek call after Play, callOrder=%v", mt.callOrder)
 	}
 }
