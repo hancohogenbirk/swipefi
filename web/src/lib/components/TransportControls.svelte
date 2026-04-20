@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '../api/client';
+  import { decideSkipForward } from '../transportLogic';
   import { getPlayerState, updateState, setPendingSeekMs } from '../stores/player.svelte';
   import { SkipBack, RotateCcw, Play, Pause, RotateCw, SkipForward } from 'lucide-svelte';
 
@@ -9,10 +10,6 @@
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing' || ps.state === 'loading');
   let idle = $derived(ps.state === 'idle' && !ps.track);
-  let remainingMs = $derived(
-    ps.duration_ms > 0 ? ps.duration_ms - ps.position_ms : 0
-  );
-  let canSkipForward = $derived(!idle && ps.duration_ms > 0 && remainingMs > SKIP_MS);
 
   async function togglePlay() {
     try {
@@ -34,11 +31,15 @@
   }
 
   async function skipForward15() {
-    if (!canSkipForward) return;
-    const pos = ps.position_ms + SKIP_MS;
-    setPendingSeekMs(pos);
+    if (idle) return;
+    const decision = decideSkipForward(ps.position_ms, ps.duration_ms, SKIP_MS);
+    if (decision.kind === 'next') {
+      await next();
+      return;
+    }
+    setPendingSeekMs(decision.positionMs);
     try {
-      await api.seek(pos);
+      await api.seek(decision.positionMs);
     } catch {
       setPendingSeekMs(null);
     }
@@ -85,7 +86,7 @@
     class="transport-btn skip-btn"
     onclick={skipForward15}
     aria-label="Forward 15 seconds"
-    disabled={!canSkipForward}
+    disabled={idle}
   >
     <RotateCw size={32} />
     <span class="skip-label">15</span>
