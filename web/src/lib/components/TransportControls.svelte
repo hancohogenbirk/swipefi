@@ -46,20 +46,22 @@
   }
 
   async function prev() {
+    setPendingSeekMs(0);
     try {
       const s = await api.prev();
       updateState(s);
     } catch {
-      // ignore
+      setPendingSeekMs(null);
     }
   }
 
   async function next() {
+    setPendingSeekMs(0);
     try {
       const s = await api.next();
       updateState(s);
     } catch {
-      // ignore
+      setPendingSeekMs(null);
     }
   }
 </script>
