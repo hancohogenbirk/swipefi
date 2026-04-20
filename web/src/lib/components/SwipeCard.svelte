@@ -182,7 +182,7 @@
   .swipe-card {
     background: linear-gradient(145deg, #1e1e1e, #2a2a2a);
     border-radius: 20px;
-    padding: 1.25rem 1.25rem;
+    padding: 1.25rem 1.25rem 0.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
