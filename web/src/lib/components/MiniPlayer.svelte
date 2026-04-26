@@ -98,7 +98,6 @@
   .mini-progress {
     height: 100%;
     background: linear-gradient(90deg, #1db954, #7cb3ff);
-    background-size: 100vw 100%;
     transition: width 1s linear;
   }
 </style>
