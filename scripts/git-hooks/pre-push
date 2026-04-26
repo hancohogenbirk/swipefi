@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Full pre-push verification: type-check, build, run all tests.
+set -euo pipefail
+
+GO=${GO:-go}
+fail=0
+
+# 1. Frontend type-check (svelte-check).
+echo "pre-push: npm --prefix web run check"
+if ! npm --prefix web run check --silent ; then
+    fail=1
+fi
+
+# 2. Frontend build — also produces web/dist/ which the Go web package embeds.
+echo "pre-push: npm --prefix web run build"
+if ! npm --prefix web run build --silent ; then
+    fail=1
+fi
+
+# 3. Full Go test suite.
+echo "pre-push: go test ./..."
+if ! "$GO" test ./... ; then
+    fail=1
+fi
+
+exit $fail

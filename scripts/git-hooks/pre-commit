@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Fast pre-commit checks. Heavier suites live in pre-push.
+set -euo pipefail
+
+GO=${GO:-go}
+fail=0
+
+# 1. gofmt: fail on any staged .go file that isn't gofmt-clean.
+staged_go=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)
+if [ -n "$staged_go" ]; then
+    unformatted=$(gofmt -l $staged_go || true)
+    if [ -n "$unformatted" ]; then
+        echo "pre-commit: gofmt would change these files:" >&2
+        echo "$unformatted" >&2
+        echo "  run: gofmt -w $unformatted" >&2
+        fail=1
+    fi
+fi
+
+# 2. go vet on internal/cmd packages. Skip web/ because its embed.go needs
+#    web/dist/ to exist (built by pre-push, not pre-commit).
+echo "pre-commit: go vet ./internal/... ./cmd/..."
+if ! "$GO" vet ./internal/... ./cmd/... ; then
+    fail=1
+fi
+
+# 3. Frontend unit tests (vitest, ~100ms).
+echo "pre-commit: npm --prefix web test"
+if ! npm --prefix web test --silent -- --run >/dev/null ; then
+    echo "pre-commit: frontend tests failed — run 'npm --prefix web test -- --run' to see output" >&2
+    fail=1
+fi
+
+exit $fail

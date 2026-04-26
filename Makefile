@@ -1,4 +1,4 @@
-.PHONY: dev build clean run test vet
+.PHONY: dev build clean run test vet install-hooks
 
 GO := /usr/local/go/bin/go
 
@@ -31,3 +31,11 @@ frontend:
 
 frontend-dev:
 	cd web && npm run dev
+
+# Git hooks. Run once after cloning. Hooks live in scripts/git-hooks/ so they
+# stay version-controlled; this target symlinks them into .git/hooks/.
+install-hooks:
+	@for hook in pre-commit pre-push; do \
+		ln -sf ../../scripts/git-hooks/$$hook .git/hooks/$$hook ; \
+		echo "installed .git/hooks/$$hook -> ../../scripts/git-hooks/$$hook" ; \
+	done

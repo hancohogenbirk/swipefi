@@ -172,6 +172,14 @@ The browser back button navigates within the current tab (e.g., subfolder → pa
 - Go 1.26+
 - Node.js 22+
 
+### First-time setup
+
+```bash
+make install-hooks
+```
+
+Installs pre-commit (gofmt, `go vet`, frontend tests) and pre-push (`svelte-check`, frontend build, full `go test ./...`) hooks. Hooks live in `scripts/git-hooks/` and are symlinked into `.git/hooks/`.
+
 ### Run
 
 ```bash
