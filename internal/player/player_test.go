@@ -82,6 +82,7 @@ func (m *mockTransport) Stop(ctx context.Context) error {
 		}
 	}
 	m.stopCalls++
+	m.callOrder = append(m.callOrder, "Stop")
 	if m.stopErr != nil {
 		return m.stopErr
 	}
@@ -2650,5 +2651,46 @@ func TestPollOnce_ExternalTakeoverAfterGracePeriod(t *testing.T) {
 
 	if state != StateIdle {
 		t.Errorf("expected StateIdle after external takeover past grace window, got %q", state)
+	}
+}
+
+func TestPollOnce_RetryAfterGracePeriodIssuesStopFirst(t *testing.T) {
+	p, mt := setupTestPlayer(t, testTracks())
+
+	// Wedged renderer: never reports Playing.
+	mt.setState(dlna.StateStopped)
+	mt.setPosition(0, 0)
+
+	// Force player into Loading well past grace period.
+	p.mu.Lock()
+	p.state = StateLoading
+	p.currentStreamURL = "http://test/stream/1"
+	p.playStartedAt = time.Now().Add(-10 * time.Second)
+	p.mu.Unlock()
+
+	initialStops := mt.stopCalls
+	initialPlays := mt.playCalls
+
+	p.pollOnce(context.Background())
+
+	if mt.stopCalls <= initialStops {
+		t.Fatalf("expected Stop during retry, got stopCalls=%d (was %d)", mt.stopCalls, initialStops)
+	}
+	if mt.playCalls <= initialPlays {
+		t.Fatalf("expected Play during retry, got playCalls=%d (was %d)", mt.playCalls, initialPlays)
+	}
+
+	// Find indices of the LAST Stop and LAST Play; Stop must come before Play.
+	lastStop, lastPlay := -1, -1
+	for i, c := range mt.callOrder {
+		if c == "Stop" {
+			lastStop = i
+		}
+		if c == "Play" {
+			lastPlay = i
+		}
+	}
+	if lastStop == -1 || lastPlay == -1 || lastStop > lastPlay {
+		t.Fatalf("expected Stop before Play in retry, got order=%v", mt.callOrder)
 	}
 }

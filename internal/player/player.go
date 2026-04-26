@@ -396,6 +396,28 @@ func (p *Player) PlayFolder(ctx context.Context, folder, sortBy, order string) e
 	return p.playCurrentLocked(ctx)
 }
 
+// cleanRestartLocked stops the renderer (if currently active) and pauses for
+// the given duration before the caller issues a fresh SetURI/Play. DLNA
+// renderers can get confused when receiving a new URI while still
+// playing/buffering another, so clearing their state first improves the odds
+// the next Play actually starts. Uses p.appCtx so the transport call
+// survives cancellation of any poll-bound context. When stopPolling is true,
+// the polling ticker is also halted (callers that own the polling lifecycle
+// must restart it themselves).
+func (p *Player) cleanRestartLocked(sleep time.Duration, stopPolling bool) {
+	if p.transport == nil {
+		return
+	}
+	if p.state != StatePlaying && p.state != StatePaused && p.state != StateLoading {
+		return
+	}
+	if stopPolling {
+		p.stopPollingLocked()
+	}
+	p.transport.Stop(p.appCtx)
+	time.Sleep(sleep)
+}
+
 func (p *Player) playCurrentLocked(ctx context.Context) error {
 	track := p.queue.Current()
 	if track == nil {
@@ -406,15 +428,7 @@ func (p *Player) playCurrentLocked(ctx context.Context) error {
 		return nil
 	}
 
-	// Stop current playback first — DLNA renderers can get confused
-	// when receiving a new URI while still playing/buffering another.
-	// Use p.appCtx (not ctx) because ctx may be a poll context that
-	// gets cancelled by stopPollingLocked below.
-	if p.transport != nil && (p.state == StatePlaying || p.state == StatePaused || p.state == StateLoading) {
-		p.stopPollingLocked()
-		p.transport.Stop(p.appCtx)
-		time.Sleep(200 * time.Millisecond)
-	}
+	p.cleanRestartLocked(200*time.Millisecond, true)
 
 	streamURL := fmt.Sprintf("http://%s:%s/stream/%s", p.localIP, p.port, track.Path)
 	p.currentStreamURL = streamURL
@@ -1078,8 +1092,13 @@ func (p *Player) pollOnce(ctx context.Context) {
 			slog.Warn("track failed to start within grace period",
 				"track", track.Title, "path", track.Path, "format", track.Format,
 				"renderer_state", tState)
-			// One more retry before giving up
+			// One more retry before giving up. Force a clean restart first —
+			// the renderer is wedged (still in StateLoading after the grace
+			// period), so a bare SetURI/Play often fails to unstick it. A
+			// Stop+pause matches the cleanup the initial play does.
 			slog.Info("retrying play after grace period timeout")
+			p.cleanRestartLocked(500*time.Millisecond, false)
+			p.state = StateLoading
 			streamURL := p.currentStreamURL
 			artURL := fmt.Sprintf("http://%s:%s/api/tracks/%d/art", p.localIP, p.port, track.ID)
 			metadata := buildDIDLMetadata(track, streamURL, artURL)
