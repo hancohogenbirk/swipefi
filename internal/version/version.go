@@ -2,4 +2,4 @@
 // Bump this constant for every meaningful release and commit.
 package version
 
-const Version = "0.2.0"
+const Version = "0.2.1"
