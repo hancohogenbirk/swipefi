@@ -12,3 +12,14 @@ export function decideSkipForward(
   if (remaining <= skipMs) return { kind: 'next' };
   return { kind: 'seek', positionMs: positionMs + skipMs };
 }
+
+export function decideCoalescedSkip(
+  positionMs: number,
+  durationMs: number,
+  accumulatedSkipMs: number,
+): SkipForwardDecision {
+  const target = positionMs + accumulatedSkipMs;
+  if (durationMs > 0 && target >= durationMs) return { kind: 'next' };
+  if (durationMs <= 0 && accumulatedSkipMs > 0) return { kind: 'next' };
+  return { kind: 'seek', positionMs: Math.max(0, target) };
+}
