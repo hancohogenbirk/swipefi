@@ -10,11 +10,13 @@
     computeProgress,
     type InterpolatorState,
   } from '../progressInterpolator';
+  import { shouldClearPendingSeek } from '../seekFreeze';
 
   const SEEK_SYNC_TOLERANCE_MS = 3000;
 
   let seeking = $state(false);
   let seekValue = $state(0);
+  let frozenAtTrackId = $state<number | undefined>(undefined);
 
   let ps = $derived(getPlayerState());
   let idle = $derived(ps.state === 'idle');
@@ -65,11 +67,22 @@
   let progress = $derived(computeProgress(positionMs, durationMs));
   let remainingMs = $derived(durationMs > 0 ? Math.max(0, durationMs - positionMs) : 0);
 
-  // Clear pending seek when WS position catches up (within 3s tolerance)
+  // Clear pending seek when WS position catches up OR when the track changes.
+  // Track change is the strongest unfreeze signal: any pending seek belongs to
+  // the previous track and must not bleed into the new one.
   $effect(() => {
     const pending = getPendingSeekMs();
-    if (pending !== null && Math.abs(ps.position_ms - pending) < SEEK_SYNC_TOLERANCE_MS) {
+    if (
+      shouldClearPendingSeek({
+        pendingMs: pending,
+        frozenAtTrackId,
+        currentTrackId: ps.track?.id,
+        currentPositionMs: ps.position_ms,
+        toleranceMs: SEEK_SYNC_TOLERANCE_MS,
+      })
+    ) {
       setPendingSeekMs(null);
+      frozenAtTrackId = undefined;
     }
   });
 
@@ -96,6 +109,7 @@
     if (!seeking) return;
     const target = seekValue;
     seeking = false;
+    frozenAtTrackId = ps.track?.id;
     setPendingSeekMs(target);
     await api.seek(target);
   }
