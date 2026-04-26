@@ -1,15 +1,25 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { api } from '../api/client';
-  import { decideSkipForward } from '../transportLogic';
+  import { decideCoalescedSkip } from '../transportLogic';
   import { getPlayerState, updateState, setPendingSeekMs } from '../stores/player.svelte';
   import { SkipBack, RotateCcw, Play, Pause, RotateCw, SkipForward } from 'lucide-svelte';
 
   const SKIP_SECONDS = 15;
   const SKIP_MS = SKIP_SECONDS * 1000;
+  const SKIP_DEBOUNCE_MS = 300;
 
   let ps = $derived(getPlayerState());
   let isPlaying = $derived(ps.state === 'playing' || ps.state === 'loading');
   let idle = $derived(ps.state === 'idle' && !ps.track);
+
+  // Skip coalescing: rapid +/-15 taps accumulate over a 300ms window and
+  // fire a single seek (or next, if the cumulative jump lands past end).
+  // The anchor is the position at the FIRST tap of a burst, so multi-tap math
+  // is consistent regardless of any optimistic UI updates in between.
+  let pendingSkipMs = 0;
+  let positionAtFirstClick: number | null = null;
+  let skipTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function togglePlay() {
     try {
@@ -20,19 +30,27 @@
     }
   }
 
-  async function skipBack15() {
-    const pos = Math.max(0, ps.position_ms - SKIP_MS);
-    setPendingSeekMs(pos);
-    try {
-      await api.seek(pos);
-    } catch {
-      setPendingSeekMs(null);
-    }
+  function queueSkip(deltaMs: number) {
+    if (idle) return;
+    if (positionAtFirstClick === null) positionAtFirstClick = ps.position_ms;
+    pendingSkipMs += deltaMs;
+    const duration = ps.duration_ms || 0;
+    const optimistic = duration > 0
+      ? Math.max(0, Math.min(positionAtFirstClick + pendingSkipMs, duration))
+      : Math.max(0, positionAtFirstClick + pendingSkipMs);
+    setPendingSeekMs(optimistic);
+    if (skipTimer !== null) clearTimeout(skipTimer);
+    skipTimer = setTimeout(fireSkip, SKIP_DEBOUNCE_MS);
   }
 
-  async function skipForward15() {
-    if (idle) return;
-    const decision = decideSkipForward(ps.position_ms, ps.duration_ms, SKIP_MS);
+  async function fireSkip() {
+    skipTimer = null;
+    const anchor = positionAtFirstClick;
+    const acc = pendingSkipMs;
+    pendingSkipMs = 0;
+    positionAtFirstClick = null;
+    if (anchor === null) return;
+    const decision = decideCoalescedSkip(anchor, ps.duration_ms, acc);
     if (decision.kind === 'next') {
       await next();
       return;
@@ -44,6 +62,10 @@
       setPendingSeekMs(null);
     }
   }
+
+  onDestroy(() => {
+    if (skipTimer !== null) clearTimeout(skipTimer);
+  });
 
   async function prev() {
     setPendingSeekMs(0);
@@ -71,7 +93,7 @@
     <SkipBack size={28} />
   </button>
 
-  <button class="transport-btn skip-btn" onclick={skipBack15} aria-label="Back 15 seconds" disabled={idle}>
+  <button class="transport-btn skip-btn" onclick={() => queueSkip(-SKIP_MS)} aria-label="Back 15 seconds" disabled={idle}>
     <RotateCcw size={32} />
     <span class="skip-label">15</span>
   </button>
@@ -86,7 +108,7 @@
 
   <button
     class="transport-btn skip-btn"
-    onclick={skipForward15}
+    onclick={() => queueSkip(SKIP_MS)}
     aria-label="Forward 15 seconds"
     disabled={idle}
   >
